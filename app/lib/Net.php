@@ -15,7 +15,7 @@ class Net {
 		'extra' => null,
 	]) : array {
 	
-		if ( !is_array( $requests ) || !count( $requests ) || !isset( $requests[0]['url'] ) ) {
+		if ( !is_array( $requests ) || !count( $requests ) || empty( $requests[0]['url'] ) ) {
 			throw new InvalidArgumentException( "Bad requests parameter." );
 		}
 	
@@ -75,7 +75,7 @@ class Net {
 	
 			$send = [];
 	
-			if ( isset( $request['headers'] ) && is_array( $request['headers'] ) ) {
+			if ( !empty( $request['headers'] ) && is_array( $request['headers'] ) ) {
 				$send = array_merge( $send, $request['headers'] );
 			}
 			
@@ -86,7 +86,7 @@ class Net {
 			
 			curl_setopt($ch, CURLOPT_URL, $request['url'] );
 			
-			if ( !isset( $request['view_headers'] ) ) {
+			if ( empty( $request['view_headers'] ) ) {
 				curl_setopt($ch, CURLOPT_HEADER, 0);
 				curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
 			}
@@ -95,19 +95,19 @@ class Net {
 				curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 0);
 			}
 			
-			if ( isset( $request['proxy'] ) && is_string( $request['proxy'] ) ) {
+			if ( !empty( $request['proxy'] ) && is_string( $request['proxy'] ) ) {
 				curl_setopt( $ch, CURLOPT_PROXY, $request['proxy'] );
 			}
-			else if ( isset( $request['proxy'] ) && is_array( $request['proxy'] ) ) {
-				if ( isset( $request['proxy']['ip_port'] ) ) curl_setopt( $ch, CURLOPT_PROXY, $request['proxy']['ip_port'] );
-				if ( isset( $request['proxy']['proxytype'] ) ) curl_setopt( $ch, CURLOPT_PROXYTYPE, $request['proxy']['proxytype'] );
-				if ( isset( $request['proxy']['proxyuserpwd'] ) ) curl_setopt( $ch, CURLOPT_PROXYUSERPWD, $request['proxy']['proxyuserpwd'] );
+			else if ( !empty( $request['proxy'] ) && is_array( $request['proxy'] ) ) {
+				if ( !empty( $request['proxy']['ip_port'] ) ) curl_setopt( $ch, CURLOPT_PROXY, $request['proxy']['ip_port'] );
+				if ( !empty( $request['proxy']['proxytype'] ) ) curl_setopt( $ch, CURLOPT_PROXYTYPE, $request['proxy']['proxytype'] );
+				if ( !empty( $request['proxy']['proxyuserpwd'] ) ) curl_setopt( $ch, CURLOPT_PROXYUSERPWD, $request['proxy']['proxyuserpwd'] );
 			}
 			
 			curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 			
-			if ( !isset($request['proxy']) ) {
-				curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+			if ( !empty($request['proxy']) ) {
+				curl_setopt($ch, CURLOPT_TIMEOUT, 10);
 			}
 			else {
 				curl_setopt($ch, CURLOPT_TIMEOUT, 5);
@@ -235,7 +235,7 @@ class Net {
 			
 		$ch = curl_init();
 		
-		if ( !empty( $options['postdata'] ) ) {
+		if ( isset( $options['postdata'] ) ) {
 			curl_setopt($ch, CURLOPT_POST, 1);
 			curl_setopt($ch, CURLOPT_POSTFIELDS, $options['postdata']);
 		}
@@ -255,15 +255,15 @@ class Net {
 			curl_setopt( $ch, CURLOPT_PROXY, $options['proxy'] );
 		}
 		else if ( !empty( $options['proxy'] ) && is_array( $options['proxy'] ) ) {
-			if ( isset( $options['proxy']['ip_port'] ) ) curl_setopt( $ch, CURLOPT_PROXY, $options['proxy']['ip_port'] );
-			if ( isset( $options['proxy']['proxytype'] ) ) curl_setopt( $ch, CURLOPT_PROXYTYPE, $options['proxy']['proxytype'] );
-			if ( isset( $options['proxy']['proxyuserpwd'] ) ) curl_setopt( $ch, CURLOPT_PROXYUSERPWD, $options['proxy']['proxyuserpwd'] );
+			if ( !empty( $options['proxy']['ip_port'] ) ) curl_setopt( $ch, CURLOPT_PROXY, $options['proxy']['ip_port'] );
+			if ( !empty( $options['proxy']['proxytype'] ) ) curl_setopt( $ch, CURLOPT_PROXYTYPE, $options['proxy']['proxytype'] );
+			if ( !empty( $options['proxy']['proxyuserpwd'] ) ) curl_setopt( $ch, CURLOPT_PROXYUSERPWD, $options['proxy']['proxyuserpwd'] );
 		}
 		
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 		
 		if ( !empty( $options['proxy'] ) ) {
-			curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+			curl_setopt($ch, CURLOPT_TIMEOUT, 10);
 		}
 		else {
 			curl_setopt($ch, CURLOPT_TIMEOUT, 5);

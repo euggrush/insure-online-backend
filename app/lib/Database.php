@@ -4,13 +4,13 @@
 
 class Database extends \mysqli {
 
-	// путь до папки с логами ошибок
+	// log folder path
 	private string $mysqlLogsDir;
 
-	// либо кидать исключение при ошибке, либо return false
+	// throws Exception or return false
 	private bool $throwExceptionOnError = true;
 
-	// дополнительные переменные
+	// extra vars
 	private array $vars = [];
 
 	public function setVar( string $key, mixed $value ) : void {
@@ -43,7 +43,7 @@ class Database extends \mysqli {
 	}
 
 	public function __construct( array $c ) {
-        @parent::__construct( $c['dbhost'], $c['dbuser'], $c['dbpass'], $c['dbname'] );
+        @parent::__construct( $c['dbhost'], $c['dbuser'], $c['dbpass'], $c['dbname'], $c['dbport'] ?? 3306 );
 
         if ($this->connect_error) {
 			$failtext = 'Connection error (' . $this->connect_errno . ') '
@@ -101,19 +101,19 @@ class Database extends \mysqli {
             $key = $this->clean( $key );
 
             if ( is_null( $value ) ) {
-                $sqlPairs[] = "{$key} = ''";
+                $sqlPairs[] = "{$key} = NULL";
             }
             else if ( is_bool( $value ) ) {
-                $sqlPairs[] = "{$key} = '" . intval( $value ) . "'";
+                $sqlPairs[] = "{$key} = \"" . intval( $value ) . "\"";
             }
             else if ( is_object( $value ) || is_array( $value ) ) {
                 $value = json_encode( $value, JSON_UNESCAPED_UNICODE );
                 $value = $this->clean( $value );
-                $sqlPairs[] = "{$key} = '{$value}'";
+                $sqlPairs[] = "{$key} = \"{$value}\"";
             }
             else {
                 $value = $this->clean( $value );
-                $sqlPairs[] = "{$key} = '{$value}'";
+                $sqlPairs[] = "{$key} = \"{$value}\"";
             }
         }
 

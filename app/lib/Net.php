@@ -36,13 +36,18 @@ class Net {
 			if ( empty( $request['proxy'] ) ) {
 				if ( empty( $request['use_ipv6'] ) ) {
 					$ip4count = count( Settings::IP4_INTERFACES );
-					$interface = Settings::IP4_INTERFACES[ random_int( 0, $ip4count - 1 ) ];
+				
+					if ( $ip4count > 0 )
+						$interface = Settings::IP4_INTERFACES[ random_int( 0, $ip4count - 1 ) ];
+					else
+						$interface = "";
+					
 					$curl_resolve = CURL_IPRESOLVE_V4;
 				}
 				else {
 					$ips6 = @file( "/usr/share/iplist/ip6.txt", FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES );
 
-					if ( $ips6 ) {
+					if ( $ips6 && count( $ips6 ) > 0 ) {
 						$ips6count = count( $ips6 );
 						$interface = $ips6[ random_int( 0, $ips6count - 1 ) ];
 						$interface = str_replace( '/64', '', $interface );
@@ -50,12 +55,18 @@ class Net {
 					}
 					else {
 						$ip4count = count( Settings::IP4_INTERFACES );
-						$interface = Settings::IP4_INTERFACES[ random_int( 0, $ip4count - 1 ) ];
+				
+						if ( $ip4count > 0 )
+							$interface = Settings::IP4_INTERFACES[ random_int( 0, $ip4count - 1 ) ];
+						else
+							$interface = "";
+						
 						$curl_resolve = CURL_IPRESOLVE_V4;
 					}
 				}
 			}
 			else {
+				$interface = "";
 				$curl_resolve = CURL_IPRESOLVE_V4;
 			}
 
@@ -105,7 +116,7 @@ class Net {
 			curl_setopt($ch, CURLOPT_NOBODY, 0);
 			curl_setopt($ch, CURLOPT_HTTPHEADER, $send);
 
-			if ( empty( $request['proxy'] ) )
+			if ( empty( $request['proxy'] ) && mb_strlen( $interface ) > 0 )
 				curl_setopt($ch, CURLOPT_INTERFACE, $interface);
 
 			if ( !empty( $request['use_cookies_storage'] ) && $request['use_cookies_storage'] ) {
@@ -153,7 +164,7 @@ class Net {
 		return $data;
 	}
 
-    public static function httpRequest( $url='', $options = [ 
+  public static function httpRequest( $url='', $options = [ 
 		'postdata' => null,
 		'headers' => null,
 		'view_headers' => false,
@@ -175,13 +186,18 @@ class Net {
 		if ( empty( $options['proxy'] ) ) {
 			if ( empty( $options['use_ipv6'] ) ) {
 				$ip4count = count( Settings::IP4_INTERFACES );
-				$interface = Settings::IP4_INTERFACES[ random_int( 0, $ip4count - 1 ) ];
+
+				if ( $ip4count > 0 )
+					$interface = Settings::IP4_INTERFACES[ random_int( 0, $ip4count - 1 ) ];
+				else
+					$interface = "";
+				
 				$curl_resolve = CURL_IPRESOLVE_V4;
 			}
 			else {
 				$ips6 = @file( "/usr/share/iplist/ip6.txt", FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES );
 
-				if ( $ips6 ) {
+				if ( $ips6 && count( $ips6 ) > 0 ) {
 					$ips6count = count( $ips6 );
 					$interface = $ips6[ random_int( 0, $ips6count - 1 ) ];
 					$interface = str_replace( '/64', '', $interface );
@@ -189,12 +205,18 @@ class Net {
 				}
 				else {
 					$ip4count = count( Settings::IP4_INTERFACES );
-					$interface = Settings::IP4_INTERFACES[ random_int( 0, $ip4count - 1 ) ];
+				
+					if ( $ip4count > 0 )
+						$interface = Settings::IP4_INTERFACES[ random_int( 0, $ip4count - 1 ) ];
+					else
+						$interface = "";
+						
 					$curl_resolve = CURL_IPRESOLVE_V4;
 				}
 			}
 		}
 		else {
+			$interface = "";
 			$curl_resolve = CURL_IPRESOLVE_V4;
 		}
 		
@@ -250,7 +272,7 @@ class Net {
 		curl_setopt($ch, CURLOPT_NOBODY, 0);
 		curl_setopt($ch, CURLOPT_HTTPHEADER, $send);
 
-		if ( empty( $options['proxy'] ) )
+		if ( empty( $request['proxy'] ) && mb_strlen( $interface ) > 0 )
 				curl_setopt($ch, CURLOPT_INTERFACE, $interface);
 
 		if ( !empty( $options['use_cookies_storage'] ) && $options['use_cookies_storage'] ) {

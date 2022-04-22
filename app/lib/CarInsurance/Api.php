@@ -1648,6 +1648,7 @@ class Api {
         $q1->free();
       }
       else {
+        $vdTableDataset['vd_uuid'] = Utils::generateUUID4();
         unset( $vdTableDataset['deleted'] );
         $mode = 'create';
       }

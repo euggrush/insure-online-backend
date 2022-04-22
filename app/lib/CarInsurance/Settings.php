@@ -24,7 +24,7 @@ class Settings {
   public const ACCESS_TOKEN_HASH_SECRET = '';
   
   public const IP4_INTERFACES = [
-    
+
   ];
   public const IP4_PROXIES = [
     
@@ -34,6 +34,8 @@ class Settings {
 
   public const AUTH_ATTEMPTS = 1000;
   public const AUTH_ATTEMPTS_INTERVAL = "PT30M";
+  public const VALIDATION_ATTEMPTS = 1000;
+  public const VALIDATION_ATTEMPTS_INTERVAL = "PT30M";
   public const TOKEN_EXPIRATION_INTERVAL = "PT6H";
 
   public const MAX_ESTIMATIONS_PER_ORDER = 5;

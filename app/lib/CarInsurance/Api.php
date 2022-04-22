@@ -55,8 +55,16 @@ class Api {
         $this->vehicles();
       break;
 
+      case Endpoints::API_VEHICLES_DATA:
+        $this->vehiclesData();
+      break;
+
       case Endpoints::API_RATING:
         $this->rating();
+      break;
+
+      case Endpoints::API_ACCESSORIES:
+        $this->accessories();
       break;
 
       case Endpoints::API_ESTIMATIONS:
@@ -120,7 +128,7 @@ class Api {
     $dt = new \DateTime();
     $currentTime = $dt->getTimestamp();
 
-    $this->app->ip_addr = $this->app->db->escape( $this->app->ip_addr );
+    $this->app->ip_addr = $this->app->db->extendedEscape( $this->app->ip_addr );
 
     $this->app->db->query( "DELETE FROM sessions WHERE expires < {$currentTime}" );
 
@@ -131,7 +139,7 @@ class Api {
       $this->printError( 401, 107 );
     }
 
-    $accessToken = $this->app->db->escape( $accessToken );
+    $accessToken = $this->app->db->extendedEscape( $accessToken );
     $accessTokenHashed = hash_hmac( "sha256", $accessToken, Settings::ACCESS_TOKEN_HASH_SECRET );
 
     $q0 = $this->app->db->query( "SELECT * FROM sessions 
@@ -230,8 +238,9 @@ class Api {
       $this->printError( 403, 101 );
     }
 
-    $email = $this->app->db->escape( $data->email );
+    $email = $this->app->db->extendedEscape( $data->email );
     $password = $data->password;
+    $validation = intval( $data->validationCode ?? 0 );
 
     $q1 = $this->app->db->query( "SELECT * FROM users WHERE email = \"{$email}\" AND deleted = 0" );
     
@@ -264,6 +273,62 @@ class Api {
     $this->app->user['role_title'] = $q2->fetch_assoc()['role'];
     $q2->free();
 
+    if ( boolval( $this->app->user['is_validated'] ) === false ) {
+      if ( $validation > 0 ) {
+        $q100 = $this->app->db->query( "SELECT * FROM users WHERE email = \"{$email}\" AND validation_code = {$validation}" );
+
+        if ( $q100->num_rows ) {
+          $this->app->db->query( "UPDATE users SET is_validated = 1 WHERE email = \"{$email}\"" );
+          $q100->free();
+        }
+        else {
+          $this->printError( 403, 112 );
+        }
+      }
+      else {
+        $dt = new \DateTime();
+        $currentTime = $dt->getTimestamp();
+
+        $dt->sub( new \DateInterval( Settings::VALIDATION_ATTEMPTS_INTERVAL ) );
+        $banTime = $dt->getTimestamp();
+
+        $this->app->db->query( "DELETE FROM validation_attempts WHERE last_time < {$banTime}" );
+
+        $q0 = $this->app->db->query( "SELECT * FROM validation_attempts WHERE user_id = {$this->app->user['user_id']} AND last_time >= {$banTime}" );
+
+        if ( $attempts = $q0->num_rows ) {
+          if ( $attempts >= Settings::VALIDATION_ATTEMPTS ) {
+            $this->printError( 429, 111 );
+          }
+
+          $q0->free();
+        }
+
+        $this->app->db->query( "INSERT INTO validation_attempts SET 
+          user_id = {$this->app->user['user_id']}, 
+          last_time = {$currentTime}" );
+
+        $newCode = intval( $this->app->user['validation_code'] );
+
+        $emailIsSent = $this->sendMail([
+          'to' => $this->app->user['email'],
+          'subject' => 'Action required',
+          'body' => "Hi there, {$this->app->user['username']}. For confirm your personality, we've sent confirmation code for you. It is {$newCode}. Have a nice day.",
+        ]);
+
+        if ( !$emailIsSent ) {
+          $this->printError( 500, 1021 );
+        }
+
+        $this->printResponse([
+          'actionRequired' => 'validation',
+          'by' => 'email',
+          'accountId' => $this->app->user['user_uuid'],
+          'email' => $this->app->user['email'],
+        ]);
+      }
+    }
+
     [ $accessToken, $accessTokenCreatedTimestamp, $accessTokenExpiresTimestamp, $accessTokenExpires ] = $this->getAccessToken();
 
     $accessTokenHashed = hash_hmac( "sha256", $accessToken, Settings::ACCESS_TOKEN_HASH_SECRET );
@@ -278,8 +343,8 @@ class Api {
       expires = {$accessTokenExpiresTimestamp}
     " );
 
-    $country = $this->app->db->escape( $this->app->geo_country );
-    $userAgent = $this->app->db->escape( $this->app->user_agent );
+    $country = $this->app->db->extendedEscape( $this->app->geo_country );
+    $userAgent = $this->app->db->extendedEscape( $this->app->user_agent );
 
     $this->app->db->query( "INSERT INTO authentications SET 
       user_id = {$this->app->user['user_id']}, 
@@ -311,7 +376,7 @@ class Api {
     $currentTime = $dt->getTimestamp();
 
     if ( $this->app->requestMethod === 'GET' ) {
-      $userUuid = $myRole === 'admin' ? $this->app->db->escape( $this->app->get['accountId'] ?? "" ) : $this->app->user['user_uuid'];
+      $userUuid = $myRole === 'admin' ? $this->app->db->extendedEscape( $this->app->get['accountId'] ?? "" ) : $this->app->user['user_uuid'];
 
       $authCount = 0;
 
@@ -435,10 +500,10 @@ class Api {
         $this->printError( 403, 103 );
       }
 
-      $userUuid =$this->app->db->escape( $this->app->get['accountId'] ?? "" );
-      $userRole = $this->app->db->escape( $this->app->get['role'] ?? "" );
-      $actionType = $this->app->db->escape( $this->app->get['action'] ?? "" );
-      $description = $this->app->db->escape( $this->app->get['description'] ?? "" );
+      $userUuid =$this->app->db->extendedEscape( $this->app->get['accountId'] ?? "" );
+      $userRole = $this->app->db->extendedEscape( $this->app->get['role'] ?? "" );
+      $actionType = $this->app->db->extendedEscape( $this->app->get['action'] ?? "" );
+      $description = $this->app->db->extendedEscape( $this->app->get['description'] ?? "" );
 
       $logsCount = 0;
 
@@ -574,7 +639,7 @@ class Api {
     $currentTime = $dt->getTimestamp();
 
     if ( $this->app->requestMethod === 'GET' ) {
-      $key = $this->app->db->escape( $this->app->get['resourceKey'] ?? "" );
+      $key = $this->app->db->extendedEscape( $this->app->get['resourceKey'] ?? "" );
       $showDeleted = $myRole === 'admin' ? boolval( $this->app->get['showDeleted'] ?? false ) : false;
 
       $sqlWhereAndConditionHideDeleted = !$showDeleted ? " AND deleted = 0" : "";
@@ -617,8 +682,6 @@ class Api {
 
       $q1->free();
 
-      $resCount = count( $resources );
-
       $resources = [
         "count" => $resCount,
         "resources" => $resources
@@ -640,7 +703,7 @@ class Api {
 
       $resourcesTableDataset = [];
 
-      $resourceKey = $this->app->db->escape( $data->resourceKey ?? "" );
+      $resourceKey = $this->app->db->extendedEscape( $data->resourceKey ?? "" );
 
       if ( !$resourceKey ) {
         $this->printError( 403, 2310 );
@@ -648,7 +711,7 @@ class Api {
 
       $resourcesTableDataset['r_key'] = $resourceKey;
 
-      $resourcesTableDataset['r_value'] = $this->app->db->escape( $data->resourceValue ?? "" );
+      $resourcesTableDataset['r_value'] = $this->app->db->extendedEscape( $data->resourceValue ?? "" );
 
       if ( isset( $data->deleted ) )
         $resourcesTableDataset['deleted'] = intval( $data->deleted ) > 0 ? 1 : 0;
@@ -697,7 +760,7 @@ class Api {
           'to_username' => '',
           'entity_id' => $resourceId,
           'action' => 'insert',
-          'fields' => $this->app->db->escape( $sqlSliceResource ),
+          'fields' => $this->app->db->extendedEscape( $sqlSliceResource ),
           'where_clause' => '',
           'description' => 'inserted resource',
           'created' => $currentTime,
@@ -717,8 +780,8 @@ class Api {
           'to_username' => '',
           'entity_id' => '',
           'action' => 'update',
-          'fields' => $this->app->db->escape( $sqlSliceResource ),
-          'where_clause' => $this->app->db->escape( "r_key = \"{$resourceKey}\"" ),
+          'fields' => $this->app->db->extendedEscape( $sqlSliceResource ),
+          'where_clause' => $this->app->db->extendedEscape( "r_key = \"{$resourceKey}\"" ),
           'description' => 'updated resource',
           'created' => $currentTime,
           'deleted' => 0 
@@ -748,7 +811,7 @@ class Api {
     $currentTime = $dt->getTimestamp();
 
     if ( $this->app->requestMethod === 'GET' ) {
-      $categoryUuid = $this->app->db->escape( $this->app->get['categoryId'] ?? "" );
+      $categoryUuid = $this->app->db->extendedEscape( $this->app->get['categoryId'] ?? "" );
       $showDeleted = $myRole === 'admin' ? boolval( $this->app->get['showDeleted'] ?? false ) : false;
 
       $sqlWhereAndConditionHideDeleted = !$showDeleted ? " AND deleted = 0" : "";
@@ -832,12 +895,12 @@ class Api {
         $this->printError( 403, 1090 );
       }
 
-      $categoryUuid = $this->app->db->escape( $data->categoryId ?? "" );
+      $categoryUuid = $this->app->db->extendedEscape( $data->categoryId ?? "" );
 
       $categoriesTableDataset = [];
 
       if ( !empty( $data->categoryName ) )
-        $categoriesTableDataset['category_name'] = $this->app->db->escape( $data->categoryName );
+        $categoriesTableDataset['category_name'] = $this->app->db->extendedEscape( $data->categoryName );
 
       if ( isset( $data->deleted ) )
         $categoriesTableDataset['deleted'] = intval( $data->deleted ) > 0 ? 1 : 0;
@@ -887,7 +950,7 @@ class Api {
           'to_username' => '',
           'entity_id' => $categoryId,
           'action' => 'insert',
-          'fields' => $this->app->db->escape( $sqlSliceCategory ),
+          'fields' => $this->app->db->extendedEscape( $sqlSliceCategory ),
           'where_clause' => '',
           'description' => 'inserted category',
           'created' => $currentTime,
@@ -922,8 +985,8 @@ class Api {
           'to_username' => '',
           'entity_id' => '',
           'action' => 'update',
-          'fields' => $this->app->db->escape( $sqlSliceCategory ),
-          'where_clause' => $this->app->db->escape( "category_uuid = \"{$categoryUuid}\"" ),
+          'fields' => $this->app->db->extendedEscape( $sqlSliceCategory ),
+          'where_clause' => $this->app->db->extendedEscape( "category_uuid = \"{$categoryUuid}\"" ),
           'description' => 'updated category',
           'created' => $currentTime,
           'deleted' => 0 
@@ -972,8 +1035,8 @@ class Api {
     $currentTime = $dt->getTimestamp();
 
     if ( $this->app->requestMethod === 'GET' ) {
-      $vehicleUuid = $this->app->db->escape( $this->app->get['vehicleId'] ?? "" );
-      $userUuid = $this->app->db->escape( $this->app->get['accountId'] ?? "" );
+      $vehicleUuid = $this->app->db->extendedEscape( $this->app->get['vehicleId'] ?? "" );
+      $userUuid = $this->app->db->extendedEscape( $this->app->get['accountId'] ?? "" );
       $showDeleted = $myRole === 'admin' ? boolval( $this->app->get['showDeleted'] ?? false ) : false;
 
       $sqlWhereAndConditionHideDeleted = !$showDeleted ? " AND deleted = 0" : "";
@@ -1037,6 +1100,7 @@ class Api {
       $dt = new \DateTime();
 
       while( $vehicle = $q1->fetch_assoc() ) {
+        $vehicleId = intval( $vehicle['vehicle_id'] );
         $userId = intval( $vehicle['user_id'] );
 
         $q3 = $this->app->db->query( "SELECT * FROM users WHERE user_id = {$userId}{$sqlWhereAndConditionHideDeleted}" );
@@ -1086,6 +1150,40 @@ class Api {
 
         $q700->free();
 
+        $accessories = [];
+
+        $q800 = $this->app->db->query( "SELECT * FROM accessories WHERE vehicle_id = {$vehicleId} AND deleted = 0" );
+
+        while( $accessory = $q800->fetch_assoc() ) {
+          $dt->setTimestamp( intval( $accessory['created'] ) );
+          $accessoryCreated = $this->formatDateTimeRepresentation( $dt );
+
+          $dt->setTimestamp( intval( $accessory['updated'] ) );
+          $accessoryUpdated = $this->formatDateTimeRepresentation( $dt );
+
+          if ( $myRole === 'admin' ) {
+            $accessories[] = [
+              'accessoryId' => $accessory['accessory_uuid'],
+              'name' => $accessory['name'],
+              'description' => nl2br( $accessory['description'] ),
+              'cost' => floatval( $accessory['cost'] ),
+              'created' => $accessoryCreated,
+              'updated' => $accessoryUpdated,
+              'deleted' => boolval( $accessory['deleted'] ),
+            ];
+          }
+          else {
+            $accessories[] = [
+              'accessoryId' => $accessory['accessory_uuid'],
+              'name' => $accessory['name'],
+              'description' => nl2br( $accessory['description'] ),
+              'cost' => floatval( $accessory['cost'] ),
+            ];
+          }
+        }
+
+        $q800->free();
+
         if ( $myRole === 'admin' ) {
           $vehicles[] = [
             'vehicleId' => $vehicle['vehicle_uuid'],
@@ -1104,7 +1202,9 @@ class Api {
             'trackingDevice' => $vehicle['tracking_device'],
             'useCase' => $vehicle['use_case'],
             'businessDescription' => $vehicle['business_description'],
-            'accessories' => $vehicle['accessories'],
+            'financed' => boolval( $vehicle['financed'] ),
+            'financeHouse' => $vehicle['finance_house'],
+            'accessories' => $accessories,
             'created' => $vehicleCreated,
             'updated' => $vehicleUpdated,
             'deleted' => boolval( $vehicle['deleted'] ),
@@ -1129,7 +1229,9 @@ class Api {
               'trackingDevice' => $vehicle['tracking_device'],
               'useCase' => $vehicle['use_case'],
               'businessDescription' => $vehicle['business_description'],
-              'accessories' => $vehicle['accessories'],
+              'financed' => boolval( $vehicle['financed'] ),
+              'financeHouse' => $vehicle['finance_house'],
+              'accessories' => $accessories,
               'created' => $vehicleCreated,
               'updated' => $vehicleUpdated,
               'deleted' => boolval( $vehicle['deleted'] ),
@@ -1159,8 +1261,8 @@ class Api {
         $this->printError( 403, 1090 );
       }
 
-      $vehicleUuid = $this->app->db->escape( $data->vehicleId ?? "" );
-      $userUuid = $myRole === 'admin' ? $this->app->db->escape( $data->accountId ?? $this->app->user['user_uuid'] ) : $this->app->user['user_uuid'];
+      $vehicleUuid = $this->app->db->extendedEscape( $data->vehicleId ?? "" );
+      $userUuid = $myRole === 'admin' ? $this->app->db->extendedEscape( $data->accountId ?? $this->app->user['user_uuid'] ) : $this->app->user['user_uuid'];
 
       $vehiclesTableDataset = [];
 
@@ -1178,19 +1280,19 @@ class Api {
       $vehiclesTableDataset['user_id'] = $userId;
 
       if ( !empty( $data->details ) )
-        $vehiclesTableDataset['details'] = $this->app->db->escape( $data->details );
+        $vehiclesTableDataset['details'] = $this->app->db->extendedEscape( $data->details );
 
       if ( !empty( $data->regNumber ) )
-        $vehiclesTableDataset['reg_number'] = $this->app->db->escape( $data->regNumber );
+        $vehiclesTableDataset['reg_number'] = $this->app->db->extendedEscape( $data->regNumber );
 
       if ( !empty( $data->vin ) )
-        $vehiclesTableDataset['vin'] = $this->app->db->escape( $data->vin );
+        $vehiclesTableDataset['vin'] = $this->app->db->extendedEscape( $data->vin );
 
       if ( !empty( $data->engine ) )
-        $vehiclesTableDataset['engine'] = $this->app->db->escape( $data->engine );
+        $vehiclesTableDataset['engine'] = $this->app->db->extendedEscape( $data->engine );
 
       if ( !empty( $data->overnightParkingVehicle ) )
-        $vehiclesTableDataset['overnight_parking_vehicle'] = $this->app->db->escape( $data->overnightParkingVehicle );
+        $vehiclesTableDataset['overnight_parking_vehicle'] = $this->app->db->extendedEscape( $data->overnightParkingVehicle );
 
       if ( !empty( $data->year ) )
         $vehiclesTableDataset['year'] = intval( $data->year );
@@ -1199,7 +1301,7 @@ class Api {
         $vehiclesTableDataset['retail_value'] = intval( $data->retailValue );
 
       if ( !empty( $data->trackingDevice ) )
-        $vehiclesTableDataset['tracking_device'] = $this->app->db->escape( $data->trackingDevice );
+        $vehiclesTableDataset['tracking_device'] = $this->app->db->extendedEscape( $data->trackingDevice );
 
 
       if ( !empty( $data->useCase ) ) {
@@ -1209,14 +1311,18 @@ class Api {
           $this->printError( 403, 1713 );
         }
 
-        $vehiclesTableDataset['use_case'] = $this->app->db->escape( $data->useCase );
+        $vehiclesTableDataset['use_case'] = $this->app->db->extendedEscape( $data->useCase );
       }
 
       if ( !empty( $data->businessDescription ) )
-        $vehiclesTableDataset['business_description'] = $this->app->db->escape( $data->businessDescription );
+        $vehiclesTableDataset['business_description'] = 
+          $this->app->db->extendedEscape( $data->businessDescription, cleanNL: false );
 
-      if ( !empty( $data->accessories ) )
-        $vehiclesTableDataset['accessories'] = $this->app->db->escape( $data->accessories );
+      if ( isset( $data->financed ) )
+        $vehiclesTableDataset['financed'] = intval( $data->financed ) > 0 ? 1 : 0;
+
+      if ( !empty( $data->financeHouse ) )
+        $vehiclesTableDataset['finance_house'] = $this->app->db->extendedEscape( $data->financeHouse );
 
       $mode = '';
 
@@ -1271,7 +1377,7 @@ class Api {
           'to_username' => '',
           'entity_id' => $vehicleId,
           'action' => 'insert',
-          'fields' => $this->app->db->escape( $sqlSliceVehicle ),
+          'fields' => $this->app->db->extendedEscape( $sqlSliceVehicle ),
           'where_clause' => '',
           'description' => 'inserted vehicle',
           'created' => $currentTime,
@@ -1297,7 +1403,7 @@ class Api {
             $vehiclesTableDataset['deleted'] = intval( $data->deleted ) > 0 ? 1 : 0;
         }
 
-        // ставим через assets
+        // moved to assets
         /*
         $vehiclePhotos = $data->vehiclePhotos ?? null;
 
@@ -1308,7 +1414,7 @@ class Api {
             }
           }
 
-          $vehiclesTableDataset['vehicle_photos'] = $this->app->db->escape( json_encode( $vehiclePhotos, JSON_UNESCAPED_UNICODE ) );
+          $vehiclesTableDataset['vehicle_photos'] = $this->app->db->extendedEscape( json_encode( $vehiclePhotos, JSON_UNESCAPED_UNICODE ), htmlspecialchars: false, cleanNL: false );
         }
         */
 
@@ -1339,8 +1445,8 @@ class Api {
           'to_username' => '',
           'entity_id' => '',
           'action' => 'update',
-          'fields' => $this->app->db->escape( $sqlSliceVehicle ),
-          'where_clause' => $this->app->db->escape( "vehicle_uuid = \"{$vehicleUuid}\"" ),
+          'fields' => $this->app->db->extendedEscape( $sqlSliceVehicle ),
+          'where_clause' => $this->app->db->extendedEscape( "vehicle_uuid = \"{$vehicleUuid}\"" ),
           'description' => 'updated vehicle',
           'created' => $currentTime,
           'deleted' => 0 
@@ -1382,10 +1488,247 @@ class Api {
         'trackingDevice' => $vehicle['tracking_device'],
         'useCase' => $vehicle['use_case'],
         'businessDescription' => $vehicle['business_description'],
-        'accessories' => $vehicle['accessories'],
+        'financed' => boolval( $vehicle['financed'] ),
+        'financeHouse' => $vehicle['finance_house'],
         'created' => $vehicleCreated,
         'updated' => $vehicleUpdated,
         'deleted' => boolval( $vehicle['deleted'] ),
+      ]);
+    }
+    else {
+      $this->printError( 405, 106 );
+    }
+  }
+
+  public function vehiclesData() : void {
+    $this->checkAccessLevel( anonymousIsAllowed: true );
+
+    $myRole = $this->app->user['role_title'];
+    $myUserId = $this->app->user['user_id'];
+
+    $dt = new \DateTime();
+    $currentTime = $dt->getTimestamp();
+
+    if ( $this->app->requestMethod === 'GET' ) {
+      $make = $this->app->db->extendedEscape( $this->app->get['make'] ?? "" );
+      $model = $this->app->db->extendedEscape( $this->app->get['model'] ?? "" );
+      $year = intval( $this->app->get['year'] ?? 0 );
+      $trackingDeviceIsRequired = 
+        isset( $this->app->get['trackingDeviceIsRequired'] ) 
+        ? boolval( $this->app->get['trackingDeviceIsRequired'] )
+        : null;
+      $showDeleted = $myRole === 'admin' ? boolval( $this->app->get['showDeleted'] ?? false ) : false;
+
+      $sqlWhereAndConditionHideDeleted = !$showDeleted ? " AND deleted = 0" : "";
+      $sqlWhereConditionHideDeleted = !$showDeleted ? " WHERE deleted = 0" : "";
+
+      $vdCount = 0;
+
+      if ( mb_strlen( $make ) > 0 
+        || mb_strlen( $model ) > 0 
+        || $year > 0
+        || !is_null( $trackingDeviceIsRequired ) ) {
+
+        $whereClause = [];
+
+        if ( mb_strlen( $make ) > 0 ) {
+          $whereClause[] = "make = \"{$make}\"";
+        }
+
+        if ( mb_strlen( $model ) > 0 ) {
+          $whereClause[] = "model = \"{$model}\"";
+        }
+
+        if ( $year > 0 ) {
+          $whereClause[] = "year = {$year}";
+        }
+
+        if ( !is_null( $trackingDeviceIsRequired ) ) {
+          $trackingDeviceIsRequired = intval( $trackingDeviceIsRequired );
+          $whereClause[] = "tracking_device_is_required = {$trackingDeviceIsRequired}";
+        }
+
+        if ( count( $whereClause ) > 0 ) {
+          $whereClause = " WHERE " . implode( " AND ", $whereClause ) . $sqlWhereAndConditionHideDeleted;
+        }
+        else {
+          $whereClause = $sqlWhereConditionHideDeleted;
+        }
+
+        $q1 = $this->app->db->query( "SELECT * FROM vehicles_data{$whereClause}" );
+        $vdCount = $q1->num_rows;
+      }
+      else {
+        $offset = intval( $this->app->get['offset'] ?? 0 );
+        $limit = intval( $this->app->get['limit'] ?? Settings::PAGINATION_MAX_LIMIT );
+        $limit = $limit <= Settings::PAGINATION_MAX_LIMIT ? $limit : Settings::PAGINATION_MAX_LIMIT;
+
+        $q1 = $this->app->db->query( "SELECT * FROM vehicles_data{$sqlWhereConditionHideDeleted} ORDER BY vd_id ASC LIMIT {$offset}, {$limit}" );
+
+        $q2 = $this->app->db->query( "SELECT COUNT(*) AS table_rows FROM vehicles_data{$sqlWhereConditionHideDeleted}" );
+
+        if ( !$q2->num_rows ) {
+          $vdCount = 0;
+        }
+        else {
+          $vdCount = intval( $q2->fetch_assoc()['table_rows'] );
+          $q2->free();
+        }
+      }
+
+      $vehiclesData = [];
+      $dt = new \DateTime();
+
+      while( $vehiclesDataRow = $q1->fetch_assoc() ) {
+        $vehiclesData[] = [
+          'vehicleDataId' => $vehiclesDataRow['vd_uuid'],
+          'make' => $vehiclesDataRow['make'],
+          'model' => $vehiclesDataRow['model'],
+          'trim' => $vehiclesDataRow['trim'],
+          'type' => $vehiclesDataRow['type'],
+          'year' => intval( $vehiclesDataRow['year'] ),
+          'trackingDeviceIsRequired' => boolval( $vehiclesDataRow['tracking_device_is_required'] ),
+          'deleted' => boolval( $vehiclesDataRow['deleted'] ),
+        ];
+      }
+
+      $q1->free();
+
+      $vehiclesData = [
+        "count" => $vdCount,
+        "vehiclesData" => $vehiclesData
+      ];
+
+      $this->printResponse( $vehiclesData );
+    }
+    else if ( $this->app->requestMethod === 'POST' ) {
+      if ( $myRole !== 'admin' ) {
+        $this->printError( 403, 103 );
+      }
+
+      $data = trim( @file_get_contents('php://input') );
+      $data = @json_decode( $data );
+
+      if ( !is_object( $data ) ) {
+        $this->printError( 403, 1090 );
+      }
+
+      $vdTableDataset = [];
+
+      $vdUuid = $this->app->db->extendedEscape( $data->vehicleDataId ?? "" );
+
+      if ( !empty( $data->make ) )
+        $vdTableDataset['make'] = $this->app->db->extendedEscape( $data->make ?? "" );
+
+      if ( !empty( $data->model ) )
+        $vdTableDataset['model'] = $this->app->db->extendedEscape( $data->model ?? "" );
+
+      if ( intval( $data->year ) )
+        $vdTableDataset['year'] = intval( $data->year ?? 0 );
+
+      if ( !empty( $data->trim ) )
+        $vdTableDataset['trim'] = $this->app->db->extendedEscape( $data->trim ?? "" );
+
+      if ( !empty( $data->type ) )
+        $vdTableDataset['type'] = $this->app->db->extendedEscape( $data->type ?? "" );
+
+      if ( isset( $data->trackingDeviceIsRequired ) )
+        $vdTableDataset['tracking_device_is_required'] = intval( $data->trackingDeviceIsRequired ) > 0 ? 1 : 0;
+
+      if ( isset( $data->deleted ) )
+          $vdTableDataset['deleted'] = intval( $data->deleted ) > 0 ? 1 : 0;
+
+
+      $mode = '';
+
+      $q1 = $this->app->db->query( "SELECT vd_id FROM vehicles_data WHERE vd_uuid = \"{$vdUuid}\"" );
+
+      if ( $q1->num_rows ) {
+        $mode = 'update';
+        $q1->free();
+      }
+      else {
+        unset( $vdTableDataset['deleted'] );
+        $mode = 'create';
+      }
+
+      $sqlSliceVd = [];
+
+      foreach( $vdTableDataset as $key => $value ) {
+        if ( is_int( $value ) || is_float( $value ) )
+          $sqlSliceVd[] = "{$key} = {$value}";
+        else
+          $sqlSliceVd[] = "{$key} = \"{$value}\"";
+      }
+
+      $sqlSliceVd = implode( ", ", $sqlSliceVd );
+
+      if ( $mode === 'create' ) {
+        $this->app->db->query( "INSERT INTO vehicles_data SET {$sqlSliceVd}" );
+        $vdId = intval( $this->app->db->insert_id );
+
+        if ( !$vdId ) {
+          $this->printError( 500, 1023 );
+        }
+
+        $actionsTableDataset = [
+          'user_uuid' => $this->app->user['user_uuid'],
+          'username' => $this->app->user['username'],
+          'role' => $this->app->user['role_title'],
+          'to_user_uuid' => '',
+          'to_username' => '',
+          'entity_id' => $vdId,
+          'action' => 'insert',
+          'fields' => $this->app->db->extendedEscape( $sqlSliceVd ),
+          'where_clause' => '',
+          'description' => 'inserted vehicle data',
+          'created' => $currentTime,
+          'deleted' => 0 
+        ];
+
+        $this->setLog( $actionsTableDataset );
+
+        $q10 = $this->app->db->query( "SELECT * FROM vehicles_data WHERE vd_id = \"{$vdId}\"" );
+      }
+      else if ( $mode === 'update' ) {
+        $this->app->db->query( "UPDATE vehicles_data SET {$sqlSliceVd} WHERE vd_uuid = \"{$vdUuid}\"" );
+
+        $actionsTableDataset = [
+          'user_uuid' => $this->app->user['user_uuid'],
+          'username' => $this->app->user['username'],
+          'role' => $this->app->user['role_title'],
+          'to_user_uuid' => '',
+          'to_username' => '',
+          'entity_id' => '',
+          'action' => 'update',
+          'fields' => $this->app->db->extendedEscape( $sqlSliceVd ),
+          'where_clause' => $this->app->db->extendedEscape( "vd_uuid = \"{$vdUuid}\"" ),
+          'description' => 'updated vehicle data',
+          'created' => $currentTime,
+          'deleted' => 0 
+        ];
+  
+        $this->setLog( $actionsTableDataset );
+
+        $q10 = $this->app->db->query( "SELECT * FROM vehicles_data WHERE vd_uuid = \"{$vdUuid}\"" );
+      }
+
+      if ( !$q10->num_rows ) {
+        $this->printError( 404, 1024 );
+      }
+
+      $vehiclesDataRow = $q10->fetch_assoc();
+      $q10->free();
+
+      $this->printResponse([
+        'vehicleDataId' => $vehiclesDataRow['vd_uuid'],
+        'make' => $vehiclesDataRow['make'],
+        'model' => $vehiclesDataRow['model'],
+        'trim' => $vehiclesDataRow['trim'],
+        'type' => $vehiclesDataRow['type'],
+        'year' => intval( $vehiclesDataRow['year'] ),
+        'trackingDeviceIsRequired' => boolval( $vehiclesDataRow['tracking_device_is_required'] ),
+        'deleted' => boolval( $vehiclesDataRow['deleted'] ),
       ]);
     }
     else {
@@ -1403,8 +1746,8 @@ class Api {
     $currentTime = $dt->getTimestamp();
 
     if ( $this->app->requestMethod === 'GET' ) {
-      $mainProductUuid = $this->app->db->escape( $this->app->get['mainProductId'] ?? "" );
-      $categoryUuid = $this->app->db->escape( $this->app->get['categoryId'] ?? "" );
+      $mainProductUuid = $this->app->db->extendedEscape( $this->app->get['mainProductId'] ?? "" );
+      $categoryUuid = $this->app->db->extendedEscape( $this->app->get['categoryId'] ?? "" );
       $showDeleted = $myRole === 'admin' ? boolval( $this->app->get['showDeleted'] ?? false ) : false;
 
       $sqlWhereAndConditionHideDeleted = !$showDeleted ? " AND deleted = 0" : "";
@@ -1579,8 +1922,8 @@ class Api {
         $this->printError( 403, 1090 );
       }
 
-      $mainProductUuid = $this->app->db->escape( $data->mainProductId ?? "" );
-      $categoryUuid = $this->app->db->escape( $data->categoryId ?? "" );
+      $mainProductUuid = $this->app->db->extendedEscape( $data->mainProductId ?? "" );
+      $categoryUuid = $this->app->db->extendedEscape( $data->categoryId ?? "" );
 
       $mainProductsTableDataset = [];
 
@@ -1600,10 +1943,11 @@ class Api {
       }
 
       if ( !empty( $data->mainProductName ) )
-        $mainProductsTableDataset['product_name'] = $this->app->db->escape( $data->mainProductName );
+        $mainProductsTableDataset['product_name'] = $this->app->db->extendedEscape( $data->mainProductName );
 
       if ( !empty( $data->mainProductDescription ) )
-        $mainProductsTableDataset['product_description'] = $this->app->db->escape( $data->mainProductDescription );
+        $mainProductsTableDataset['product_description'] = 
+          $this->app->db->extendedEscape( $data->mainProductDescription, cleanNL: false );
 
       if ( isset( $data->isRequiredCoverages ) )
         $mainProductsTableDataset['is_required_coverages'] = intval( $data->isRequiredCoverages ) > 0 ? 1 : 0;
@@ -1666,7 +2010,7 @@ class Api {
           'to_username' => '',
           'entity_id' => $mainProductId,
           'action' => 'insert',
-          'fields' => $this->app->db->escape( $sqlSliceMainProduct ),
+          'fields' => $this->app->db->extendedEscape( $sqlSliceMainProduct ),
           'where_clause' => '',
           'description' => 'inserted main product',
           'created' => $currentTime,
@@ -1701,8 +2045,8 @@ class Api {
           'to_username' => '',
           'entity_id' => '',
           'action' => 'update',
-          'fields' => $this->app->db->escape( $sqlSliceMainProduct ),
-          'where_clause' => $this->app->db->escape( "product_uuid = \"{$mainProductUuid}\"" ),
+          'fields' => $this->app->db->extendedEscape( $sqlSliceMainProduct ),
+          'where_clause' => $this->app->db->extendedEscape( "product_uuid = \"{$mainProductUuid}\"" ),
           'description' => 'updated main product',
           'created' => $currentTime,
           'deleted' => 0 
@@ -1767,9 +2111,9 @@ class Api {
     $currentTime = $dt->getTimestamp();
 
     if ( $this->app->requestMethod === 'GET' ) {
-      $subProductUuid = $this->app->db->escape( $this->app->get['subProductId'] ?? "" );
-      $mainProductUuid = $this->app->db->escape( $this->app->get['mainProductId'] ?? "" );
-      $categoryUuid = $this->app->db->escape( $this->app->get['categoryId'] ?? "" );
+      $subProductUuid = $this->app->db->extendedEscape( $this->app->get['subProductId'] ?? "" );
+      $mainProductUuid = $this->app->db->extendedEscape( $this->app->get['mainProductId'] ?? "" );
+      $categoryUuid = $this->app->db->extendedEscape( $this->app->get['categoryId'] ?? "" );
       $showDeleted = $myRole === 'admin' ? boolval( $this->app->get['showDeleted'] ?? false ) : false;
 
       $sqlWhereAndConditionHideDeleted = !$showDeleted ? " AND deleted = 0" : "";
@@ -1949,8 +2293,8 @@ class Api {
         $this->printError( 403, 1090 );
       }
 
-      $subProductUuid = $this->app->db->escape( $data->subProductId ?? "" );
-      $mainProductUuid = $this->app->db->escape( $data->mainProductId ?? "" );
+      $subProductUuid = $this->app->db->extendedEscape( $data->subProductId ?? "" );
+      $mainProductUuid = $this->app->db->extendedEscape( $data->mainProductId ?? "" );
 
       $subProductsTableDataset = [];
 
@@ -1972,10 +2316,11 @@ class Api {
       }
 
       if ( !empty( $data->subProductName ) )
-        $subProductsTableDataset['product_name'] = $this->app->db->escape( $data->subProductName );
+        $subProductsTableDataset['product_name'] = $this->app->db->extendedEscape( $data->subProductName );
 
       if ( !empty( $data->subProductDescription ) )
-        $subProductsTableDataset['product_description'] = $this->app->db->escape( $data->subProductDescription );
+        $subProductsTableDataset['product_description'] = 
+          $this->app->db->extendedEscape( $data->subProductDescription, cleanNL: false );
 
       if ( isset( $data->isRequired ) )
         $subProductsTableDataset['is_required'] = intval( $data->isRequired ) > 0 ? 1 : 0;
@@ -2038,7 +2383,7 @@ class Api {
           'to_username' => '',
           'entity_id' => $subProductId,
           'action' => 'insert',
-          'fields' => $this->app->db->escape( $sqlSliceSubProduct ),
+          'fields' => $this->app->db->extendedEscape( $sqlSliceSubProduct ),
           'where_clause' => '',
           'description' => 'inserted sub product',
           'created' => $currentTime,
@@ -2073,8 +2418,8 @@ class Api {
           'to_username' => '',
           'entity_id' => '',
           'action' => 'update',
-          'fields' => $this->app->db->escape( $sqlSliceSubProduct ),
-          'where_clause' => $this->app->db->escape( "product_uuid = \"{$subProductUuid}\"" ),
+          'fields' => $this->app->db->extendedEscape( $sqlSliceSubProduct ),
+          'where_clause' => $this->app->db->extendedEscape( "product_uuid = \"{$subProductUuid}\"" ),
           'description' => 'updated sub product',
           'created' => $currentTime,
           'deleted' => 0 
@@ -2155,7 +2500,7 @@ class Api {
     $currentTime = $dt->getTimestamp();
 
     if ( $this->app->requestMethod === 'GET' ) {
-      $userUuid = $myRole === 'admin' ? $this->app->db->escape( $this->app->get['accountId'] ?? "" ) : $this->app->user['user_uuid'];
+      $userUuid = $myRole === 'admin' ? $this->app->db->extendedEscape( $this->app->get['accountId'] ?? "" ) : $this->app->user['user_uuid'];
       $showDeleted = $myRole === 'admin' ? boolval( $this->app->get['showDeleted'] ?? false ) : false;
 
       $sqlWhereAndConditionHideDeleted = !$showDeleted ? " AND deleted = 0" : "";
@@ -2296,7 +2641,7 @@ class Api {
       $newRating = intval( $data->rating ?? 0 );
       $newRating = $newRating >= 0 ? $newRating : 0;
 
-      $userUuid = $myRole === 'admin' ? $this->app->db->escape( $data->accountId ?? $this->app->user['user_uuid'] ) : $this->app->user['user_uuid'];
+      $userUuid = $myRole === 'admin' ? $this->app->db->extendedEscape( $data->accountId ?? $this->app->user['user_uuid'] ) : $this->app->user['user_uuid'];
 
       $ratingTableDataset = [];
 
@@ -2347,7 +2692,7 @@ class Api {
         'to_username' => $user['username'],
         'entity_id' => $ratingId,
         'action' => 'update',
-        'fields' => $this->app->db->escape( $sqlSliceRating ),
+        'fields' => $this->app->db->extendedEscape( $sqlSliceRating ),
         'where_clause' => "",
         'description' => 'updated account rating',
         'created' => $currentTime,
@@ -2375,6 +2720,289 @@ class Api {
     }
   }
 
+  public function accessories() : void {
+    $this->checkAccessLevel( anonymousIsAllowed: true );
+
+    $myRole = $this->app->user['role_title'];
+    $myUserId = $this->app->user['user_id'];
+
+    $dt = new \DateTime();
+    $currentTime = $dt->getTimestamp();
+
+    if ( $this->app->requestMethod === 'GET' ) {
+      $vehicleUuid = $this->app->db->extendedEscape( $this->app->get['vehicleId'] ?? "" );
+      $showDeleted = $myRole === 'admin' ? boolval( $this->app->get['showDeleted'] ?? false ) : false;
+
+      $sqlWhereAndConditionHideDeleted = !$showDeleted ? " AND deleted = 0" : "";
+      $sqlWhereConditionHideDeleted = !$showDeleted ? " WHERE deleted = 0" : "";
+
+      $accessoriesCount = 0;
+
+      if ( mb_strlen( $vehicleUuid ) > 0 ) {
+        $q0 = $this->app->db->query( "SELECT vehicle_id FROM vehicles WHERE vehicle_uuid = \"{$vehicleUuid}\"{$sqlWhereAndConditionHideDeleted}" );
+
+        if ( !$q0->num_rows ) {
+          $this->printError( 404, 2410 );
+        }
+
+        $vehicleId = intval( $q0->fetch_assoc()['vehicle_id'] );
+        $q0->free();
+
+        $q1 = $this->app->db->query( "SELECT * FROM accessories WHERE vehicle_id = \"{$vehicleId}\"{$sqlWhereAndConditionHideDeleted}" );
+        $accessoriesCount = 1;
+      }
+      else {
+        if ( $myRole !== 'admin' )
+          $this->printError( 404, 2411 );
+
+        $offset = intval( $this->app->get['offset'] ?? 0 );
+        $limit = intval( $this->app->get['limit'] ?? Settings::PAGINATION_MAX_LIMIT );
+        $limit = $limit <= Settings::PAGINATION_MAX_LIMIT ? $limit : Settings::PAGINATION_MAX_LIMIT;
+
+        $q1 = $this->app->db->query( "SELECT * FROM accessories{$sqlWhereConditionHideDeleted} ORDER BY accessory_id ASC LIMIT {$offset}, {$limit}" );
+
+        $q2 = $this->app->db->query( "SELECT COUNT(*) AS table_rows FROM accessories{$sqlWhereConditionHideDeleted}" );
+
+        if ( !$q2->num_rows ) {
+          $accessoriesCount = 0;
+        }
+        else {
+          $accessoriesCount = intval( $q2->fetch_assoc()['table_rows'] );
+          $q2->free();
+        }
+      }
+
+      $accessories = [];
+      $dt = new \DateTime();
+
+      while( $accessory = $q1->fetch_assoc() ) {
+        $vehicleId = intval( $accessory['vehicle_id'] );
+
+        $q0 = $this->app->db->query( "SELECT * FROM vehicles WHERE vehicle_id = \"{$vehicleId}\" AND deleted = 0" );
+
+        if ( !$q0->num_rows ) {
+          continue;
+        }
+
+        $vehicle = $q0->fetch_assoc();
+        $q0->free();
+
+        $vehicleUuid = $vehicle['vehicle_uuid'];
+
+        $dt->setTimestamp( intval( $accessory['created'] ) );
+        $accessoryCreated = $this->formatDateTimeRepresentation( $dt );
+
+        $dt->setTimestamp( intval( $accessory['updated'] ) );
+        $accessoryUpdated = $this->formatDateTimeRepresentation( $dt );
+
+        $accessories[] = [
+          'vehicleId' => $vehicleUuid,
+          'vehicleDetails' => $vehicle['details'],
+          'vehicleYear' => intval( $vehicle['year'] ),
+          'accessoryId' => $accessory['accessory_uuid'],
+          'name' => $accessory['name'],
+          'description' => nl2br( $accessory['description'] ),
+          'cost' => floatval( $accessory['cost'] ),
+          'created' => $accessoryCreated,
+          'updated' => $accessoryUpdated,
+          'deleted' => boolval( $accessory['deleted'] ),
+        ];
+      }
+
+      $q1->free();
+
+      $accessories = [
+        "count" => $accessoriesCount,
+        "accessories" => $accessories
+      ];
+
+      $this->printResponse( $accessories );
+    }
+    else if ( $this->app->requestMethod === 'POST' ) {
+      if ( $myRole !== 'admin' ) {
+        //$this->printError( 403, 103 );
+      }
+
+      $data = trim( @file_get_contents('php://input') );
+      $data = @json_decode( $data );
+
+      if ( !is_object( $data ) ) {
+        $this->printError( 403, 1090 );
+      }
+
+      $accessoriesTableDataset = [];
+
+      $vehicleUuid = $this->app->db->extendedEscape( $data->vehicleId ?? "" );
+      $accessoryUuid = $this->app->db->extendedEscape( $data->accessoryId ?? "" );
+
+      if ( !empty( $data->name ) )
+        $accessoriesTableDataset['name'] = $this->app->db->extendedEscape( $data->name ?? "" );
+
+      if ( !empty( $data->description ) )
+        $accessoriesTableDataset['description'] = 
+          $this->app->db->extendedEscape( $data->description ?? "", cleanNL: false );
+
+      $accessoriesTableDataset['cost'] = floatval( $data->cost ?? 0.0 );
+
+      if ( $accessoriesTableDataset['cost'] <= 0 ) {
+        $this->printError( 404, 2413 );
+      }
+
+      $mode = '';
+
+      if ( mb_strlen( $accessoryUuid ) > 0 ) {
+        $mode = 'update';
+        $accessoriesTableDataset['updated'] = $currentTime;
+
+        $q1 = $this->app->db->query( "SELECT accessory_id FROM accessories WHERE accessory_uuid = \"{$accessoryUuid}\"" );
+
+        if ( $q1->num_rows ) {
+          $q1->free();
+
+          if ( isset( $data->deleted ) )
+            $accessoriesTableDataset['deleted'] = intval( $data->deleted ) > 0 ? 1 : 0;
+        }
+        else {
+          $this->printError( 404, 2411 );
+        }
+      }
+      else {
+        $mode = 'create';
+        $accessoryUuid = Utils::generateUUID4();
+        $accessoriesTableDataset['accessory_uuid'] = $accessoryUuid;
+        $accessoriesTableDataset['created'] = $currentTime;
+        $accessoriesTableDataset['updated'] = 0;
+      }
+
+      $vehicle = null;
+      $vehicleId = 0;
+
+      if ( $mode === 'create' || ( $mode === 'update' && mb_strlen( $vehicleUuid ) > 0 ) ) {
+        $q0 = $this->app->db->query( "SELECT * FROM vehicles WHERE vehicle_uuid = \"{$vehicleUuid}\" AND deleted = 0" );
+
+        $numRows = $q0->num_rows;
+
+        if ( $numRows > 0 ) {
+          $vehicle = $q0->fetch_assoc();
+          $q0->free();
+          $vehicleId = intval( $vehicle['vehicle_id'] );
+        }
+        else {
+          $this->printError( 404, 2410 );
+        }
+      }
+
+      if ( $vehicleId > 0 )
+        $accessoriesTableDataset['vehicle_id'] = $vehicleId;
+
+      $sqlSliceAccessories = [];
+
+      foreach( $accessoriesTableDataset as $key => $value ) {
+        if ( is_int( $value ) || is_float( $value ) )
+          $sqlSliceAccessories[] = "{$key} = {$value}";
+        else
+          $sqlSliceAccessories[] = "{$key} = \"{$value}\"";
+      }
+
+      $sqlSliceAccessories = implode( ", ", $sqlSliceAccessories );
+
+      if ( $mode === 'create' ) {
+        if ( empty( $accessoriesTableDataset['name'] ) ) {
+          $this->printError( 403, 2412 );
+        }
+
+        $this->app->db->query( "INSERT INTO accessories SET {$sqlSliceAccessories}" );
+        $accessoryId = intval( $this->app->db->insert_id );
+
+        if ( !$accessoryId ) {
+          $this->printError( 500, 1022 );
+        }
+
+        $actionsTableDataset = [
+          'user_uuid' => $this->app->user['user_uuid'],
+          'username' => $this->app->user['username'],
+          'role' => $this->app->user['role_title'],
+          'to_user_uuid' => '',
+          'to_username' => '',
+          'entity_id' => $accessoryId,
+          'action' => 'insert',
+          'fields' => $this->app->db->extendedEscape( $sqlSliceAccessories ),
+          'where_clause' => '',
+          'description' => 'inserted accessory',
+          'created' => $currentTime,
+          'deleted' => 0 
+        ];
+
+        $this->setLog( $actionsTableDataset );
+      }
+      else if ( $mode === 'update' ) {
+        $this->app->db->query( "UPDATE accessories SET {$sqlSliceAccessories} WHERE accessory_uuid = \"{$accessoryUuid}\"" );
+
+        $actionsTableDataset = [
+          'user_uuid' => $this->app->user['user_uuid'],
+          'username' => $this->app->user['username'],
+          'role' => $this->app->user['role_title'],
+          'to_user_uuid' => '',
+          'to_username' => '',
+          'entity_id' => '',
+          'action' => 'update',
+          'fields' => $this->app->db->extendedEscape( $sqlSliceAccessories ),
+          'where_clause' => $this->app->db->extendedEscape( "accessory_uuid = \"{$accessoryUuid}\"" ),
+          'description' => 'updated accessory',
+          'created' => $currentTime,
+          'deleted' => 0 
+        ];
+  
+        $this->setLog( $actionsTableDataset );
+      }
+
+      $q1 = $this->app->db->query( "SELECT * FROM accessories WHERE accessory_uuid = \"{$accessoryUuid}\"" );
+
+      if ( $q1->num_rows ) {
+        $accessory = $q1->fetch_assoc();
+        $q1->free();
+
+        if ( is_null( $vehicle ) ) {
+          $vehicleId = intval( $accessory['vehicle_id'] );
+
+          $q2 = $this->app->db->query( "SELECT * FROM vehicles WHERE vehicle_id = \"{$vehicleId}\"" );
+
+          if ( !$q2->num_rows ) {
+            $this->printError( 404, 2410 );
+          }
+
+          $vehicle = $q2->fetch_assoc();
+          $q2->free();
+        }
+      }
+      else {
+        $this->printError( 404, 2411 );
+      }
+
+      $dt->setTimestamp( intval( $accessory['created'] ) );
+      $accessoryCreated = $this->formatDateTimeRepresentation( $dt );
+
+      $dt->setTimestamp( intval( $accessory['updated'] ) );
+      $accessoryUpdated = $this->formatDateTimeRepresentation( $dt );
+
+      $this->printResponse([
+        'vehicleId' => $vehicle['vehicle_uuid'],
+        'vehicleDetails' => $vehicle['details'],
+        'vehicleYear' => intval( $vehicle['year'] ),
+        'accessoryId' => $accessory['accessory_uuid'],
+        'name' => $accessory['name'],
+        'description' => nl2br( $accessory['description'] ),
+        'cost' => floatval( $accessory['cost'] ),
+        'created' => $accessoryCreated,
+        'updated' => $accessoryUpdated,
+        'deleted' => boolval( $accessory['deleted'] ),
+      ]);
+    }
+    else {
+      $this->printError( 405, 106 );
+    }
+  }
+
   public function estimations() : void {
     $this->checkAccessLevel( anonymousIsAllowed: false );
 
@@ -2389,8 +3017,8 @@ class Api {
         $this->printError( 403, 103 );
       }*/
 
-      $estimationUuid = $this->app->db->escape( $this->app->get['estimationId'] ?? "" );
-      $userUuid = $myRole === 'admin' ? $this->app->db->escape( $this->app->get['accountId'] ?? "" ) : $this->app->user['user_uuid'];
+      $estimationUuid = $this->app->db->extendedEscape( $this->app->get['estimationId'] ?? "" );
+      $userUuid = $myRole === 'admin' ? $this->app->db->extendedEscape( $this->app->get['accountId'] ?? "" ) : $this->app->user['user_uuid'];
       $showDeleted = $myRole === 'admin' ? boolval( $this->app->get['showDeleted'] ?? false ) : false;
 
       $sqlWhereAndConditionHideDeleted = !$showDeleted ? " AND deleted = 0" : "";
@@ -2416,7 +3044,7 @@ class Api {
 
         $filterCreated = " AND created >= {$createdFrom} AND created <= {$createdTo}";
 
-        $sqlOrder = $this->app->db->escape( $this->app->get['order'] ?? "" );
+        $sqlOrder = $this->app->db->extendedEscape( $this->app->get['order'] ?? "" );
 
         $orderBy = "created DESC";
 
@@ -2464,7 +3092,7 @@ class Api {
 
         $filterCreated = " AND created >= {$createdFrom} AND created <= {$createdTo}";
 
-        $sqlOrder = $this->app->db->escape( $this->app->get['order'] ?? "" );
+        $sqlOrder = $this->app->db->extendedEscape( $this->app->get['order'] ?? "" );
 
         $orderBy = "created DESC";
   
@@ -2509,67 +3137,77 @@ class Api {
         $dt->setTimestamp( intval( $estimation['created'] ) );
         $estimationCreated = $this->formatDateTimeRepresentation( $dt );
 
-        $product = null;
         $subProducts = [];
+        $accessories = [];
 
         $product = @json_decode( $estimation['products'] );
-        $mainProductUuid = $this->app->db->escape( $product->mainProductId ?? "" );
 
-        $mainProductName = $product->mainProductName ?? "";
-        $mainProductCost = floatval( $product->mainProductCost ?? 0.0 );
-        
-        if ( 
-          !is_object( $product ) 
-          || empty( $mainProductUuid ) 
-          || !isset( $product->subProducts ) 
-          || !is_array( $product->subProducts ) 
-        ) {
-          continue;
+        if ( $estimation['type'] === "estimation" ) {
+          $mainProductUuid = $this->app->db->extendedEscape( $product->mainProductId ?? "" );
+
+          $mainProductName = $product->mainProductName ?? "";
+          $mainProductCost = floatval( $product->mainProductCost ?? 0.0 );
+          
+          if ( 
+            !is_object( $product ) 
+            || empty( $mainProductUuid ) 
+            || !isset( $product->subProducts ) 
+            || !is_array( $product->subProducts ) 
+          ) {
+            continue;
+          }
+
+          $q6 = $this->app->db->query( "SELECT * FROM main_products WHERE product_uuid = \"{$mainProductUuid}\"" );
+
+          if ( !$q6->num_rows ) continue;
+
+          $mainProduct = $q6->fetch_assoc();
+          $q6->free();
+
+          $mainProductId = intval( $mainProduct['main_product_id'] );
+          $mainProductIsDeleted = boolval( $mainProduct['deleted'] );
+
+          foreach( $product->subProducts as $i => $subProduct ) {
+            $subProductUuid = $this->app->db->extendedEscape( $subProduct->subProductId ?? "" );
+
+            $q7 = $this->app->db->query( "SELECT * FROM sub_products WHERE product_uuid = \"{$subProductUuid}\"" );
+
+            if ( !$q7->num_rows ) continue;
+
+            $subProductRow = $q7->fetch_assoc();
+            $q7->free();
+
+            $subProductName = $subProduct->subProductName ?? "";
+            $subProductCost = floatval( $subProduct->subProductCost ?? 0.0 );
+
+            $subProductIsDeleted = boolval( $subProductRow['deleted'] );
+
+            $subProducts[] = [
+              'subProductId' => $subProductUuid,
+              'subProductName' => $subProductName,
+              'subProductCost' => $subProductCost,
+              'subProductIsDeleted' => $subProductIsDeleted,
+            ];
+          }
+    
+          $categoryId = intval( $mainProduct['category_id'] );
+    
+          $q2 = $this->app->db->query( "SELECT * FROM categories WHERE category_id = {$categoryId}{$sqlWhereAndConditionHideDeleted}" );
+    
+          if ( !$q2->num_rows ) {
+            continue;
+          }
+
+          $category = $q2->fetch_assoc();
+          $q2->free();
         }
+        else if ( $estimation['type'] === "accessory" ) {
+          if ( !is_array( $product ) ) {
+            continue;
+          }
 
-        $q6 = $this->app->db->query( "SELECT * FROM main_products WHERE product_uuid = \"{$mainProductUuid}\"" );
-
-        if ( !$q6->num_rows ) continue;
-
-        $mainProduct = $q6->fetch_assoc();
-        $q6->free();
-
-        $mainProductId = intval( $mainProduct['main_product_id'] );
-        $mainProductIsDeleted = boolval( $mainProduct['deleted'] );
-
-        foreach( $product->subProducts as $i => $subProduct ) {
-          $subProductUuid = $this->app->db->escape( $subProduct->subProductId ?? "" );
-
-          $q7 = $this->app->db->query( "SELECT * FROM sub_products WHERE product_uuid = \"{$subProductUuid}\"" );
-
-          if ( !$q7->num_rows ) continue;
-
-          $subProductRow = $q7->fetch_assoc();
-          $q7->free();
-
-          $subProductName = $subProduct->subProductName ?? "";
-          $subProductCost = floatval( $subProduct->subProductCost ?? 0.0 );
-
-          $subProductIsDeleted = boolval( $subProductRow['deleted'] );
-
-          $subProducts[] = [
-            'subProductId' => $subProductUuid,
-            'subProductName' => $subProductName,
-            'subProductCost' => $subProductCost,
-            'subProductIsDeleted' => $subProductIsDeleted,
-          ];
+          $accessories = $product;
         }
-  
-        $categoryId = intval( $mainProduct['category_id'] );
-  
-        $q2 = $this->app->db->query( "SELECT * FROM categories WHERE category_id = {$categoryId}{$sqlWhereAndConditionHideDeleted}" );
-  
-        if ( !$q2->num_rows ) {
-          continue;
-        }
-
-        $category = $q2->fetch_assoc();
-        $q2->free();
 
         $q3 = $this->app->db->query( "SELECT * FROM users WHERE user_id = {$userId}{$sqlWhereAndConditionHideDeleted}" );
   
@@ -2605,33 +3243,60 @@ class Api {
         $birthDateFormatted = $this->formatDateTimeRepresentation( $birthDate );
         $userAge = intval( $currentDate->diff( $birthDate )->format( '%Y' ) );
 
-        $estimations[] = [
-          'estimationId' => $estimation['estimation_uuid'],
-          'accountId' => $user['user_uuid'],
-          'username' => $user['username'],
-          'firstName' => $user['first_name'],
-          'lastName' => $user['last_name'],
-          'birthDate' => intval( $user['birth_date'] ) * 1000,
-          'birthDateFormatted' => $birthDateFormatted,
-          'age' => $userAge,
-          'address' => $user['address'],
-          'email' => $user['email'],
-          'cellphone' => $user['cellphone'],
-          'vehicleId' => $vehicle['vehicle_uuid'],
-          'vehicleDetails' => $vehicleDetails,
-          'vehicleRetailValue' => $vehicleRetailValue,
-          'vehicleIsDeleted' => $vehicleIsDeleted,
-          'categoryId' => $category['category_uuid'],
-          'categoryName' => $category['category_name'],
-          'mainProductId' => $mainProduct['product_uuid'],
-          'mainProductName' => $mainProductName,
-          'mainProductCost' => $mainProductCost,
-          'mainProductIsDeleted' => $mainProductIsDeleted,
-          'subProducts' => $subProducts,
-          'totalCost' => $totalCost,
-          'created' => $estimationCreated,
-          'deleted' => $deleted,
-        ];
+        if ( $estimation['type'] === "estimation" ) {
+          $estimations[] = [
+            'estimationId' => $estimation['estimation_uuid'],
+            'estimationType' => $estimation['type'],
+            'accountId' => $user['user_uuid'],
+            'username' => $user['username'],
+            'firstName' => $user['first_name'],
+            'lastName' => $user['last_name'],
+            'birthDate' => intval( $user['birth_date'] ) * 1000,
+            'birthDateFormatted' => $birthDateFormatted,
+            'age' => $userAge,
+            'address' => $user['address'],
+            'email' => $user['email'],
+            'cellphone' => $user['cellphone'],
+            'vehicleId' => $vehicle['vehicle_uuid'],
+            'vehicleDetails' => $vehicleDetails,
+            'vehicleRetailValue' => $vehicleRetailValue,
+            'vehicleIsDeleted' => $vehicleIsDeleted,
+            'categoryId' => $category['category_uuid'],
+            'categoryName' => $category['category_name'],
+            'mainProductId' => $mainProduct['product_uuid'],
+            'mainProductName' => $mainProductName,
+            'mainProductCost' => $mainProductCost,
+            'mainProductIsDeleted' => $mainProductIsDeleted,
+            'subProducts' => $subProducts,
+            'totalCost' => $totalCost,
+            'created' => $estimationCreated,
+            'deleted' => $deleted,
+          ];
+        }
+        else if ( $estimation['type'] === "accessory" ) {
+          $estimations[] = [
+            'estimationId' => $estimation['estimation_uuid'],
+            'estimationType' => $estimation['type'],
+            'accountId' => $user['user_uuid'],
+            'username' => $user['username'],
+            'firstName' => $user['first_name'],
+            'lastName' => $user['last_name'],
+            'birthDate' => intval( $user['birth_date'] ) * 1000,
+            'birthDateFormatted' => $birthDateFormatted,
+            'age' => $userAge,
+            'address' => $user['address'],
+            'email' => $user['email'],
+            'cellphone' => $user['cellphone'],
+            'vehicleId' => $vehicle['vehicle_uuid'],
+            'vehicleDetails' => $vehicleDetails,
+            'vehicleRetailValue' => $vehicleRetailValue,
+            'vehicleIsDeleted' => $vehicleIsDeleted,
+            'accessories' => $accessories,
+            'totalCost' => $totalCost,
+            'created' => $estimationCreated,
+            'deleted' => $deleted,
+          ];
+        }
       }
 
       $q1->free();
@@ -2651,68 +3316,19 @@ class Api {
         $this->printError( 403, 1090 );
       }
 
-      $userUuid = $myRole === 'admin' ? $this->app->db->escape( $data->accountId ?? $this->app->user['user_uuid'] ) : $this->app->user['user_uuid'];
-      $mainProductUuid = $this->app->db->escape( $data->mainProductId ?? "" );
+      $estimationType = $this->app->db->extendedEscape( $data->estimationType ?? "" );
+      $userUuid = $myRole === 'admin' ? $this->app->db->extendedEscape( $data->accountId ?? $this->app->user['user_uuid'] ) : $this->app->user['user_uuid'];
+      $mainProductUuid = $this->app->db->extendedEscape( $data->mainProductId ?? "" );
       $subProductsUuids = $data->subProductsIds ?? [];
-      $vehicleUuid = $this->app->db->escape( $data->vehicleId ?? "" );
+      $accessoriesUuids = $data->accessoriesIds ?? [];
+      $vehicleUuid = $this->app->db->extendedEscape( $data->vehicleId ?? "" );
 
-      if ( !is_array( $subProductsUuids ) ) $subProductsUuids = [];
-
-      /*
-      Цена машины * rate и делим на 12
-      К этой сумме прибавляем цену продукта и субпродуктов
-      Пример:
-      тачка 100 000 * 0.0199 = 1990
-      1990 / 12 = 165.8
-      цена продукта и суб 600
-      165.8 + 600 = 765.8
-      Это число возвращаем
-      */
-
-      $productsCost = 0.0;
-
-      $q6 = $this->app->db->query( "SELECT * FROM main_products WHERE product_uuid = \"{$mainProductUuid}\" AND deleted = 0" );
-
-      if ( !$q6->num_rows ) {
-        $this->printError( 404, 1911 );
-      }
-
-      $mainProduct = $q6->fetch_assoc();
-      $q6->free();
-
-      $mainProductId = intval( $mainProduct['main_product_id'] );
-
-      $mainProductCost = floatval( $mainProduct['cost'] );
-      $productsCost += $mainProductCost;
-
-      $subProducts = [];
-
-      foreach( $subProductsUuids as $subProductUuid ) {
-        $subProductUuid = $this->app->db->escape( $subProductUuid );
-
-        $q7 = $this->app->db->query( "SELECT * FROM sub_products 
-          WHERE product_uuid = \"{$subProductUuid}\" AND main_product_id = {$mainProductId} AND deleted = 0" );
-
-        if ( !$q7->num_rows ) {
-          $this->printError( 404, 1912 );
-        }
-  
-        while( $subProduct = $q7->fetch_assoc() ) {
-          $subProductCost = floatval( $subProduct['cost'] );
-          $productsCost += $subProductCost;
-
-          $subProducts[] = [
-            'subProductId' => $subProduct['product_uuid'],
-            'subProductName' => $subProduct['product_name'],
-            'subProductCost' => $subProductCost,
-          ];
-        }
-
-        $q7->free();
+      if ( !in_array( needle: $estimationType, haystack: [ "estimation", "accessory" ], strict: true ) ) {
+        $this->printError( 403, 1918 );
       }
 
       $q3 = $this->app->db->query( "SELECT * FROM users WHERE user_uuid = \"{$userUuid}\" AND deleted = 0" );
-  
+    
       if ( !$q3->num_rows ) {
         $this->printError( 404, 1913 );
       }
@@ -2728,7 +3344,7 @@ class Api {
       $userAge = intval( $currentDate->diff( $birthDate )->format( '%Y' ) );
 
       $q4 = $this->app->db->query( "SELECT * FROM rating WHERE rating_id = {$ratingId} AND deleted = 0" );
-  
+    
       if ( !$q4->num_rows ) {
         $this->printError( 404, 1914 );
       }
@@ -2740,7 +3356,7 @@ class Api {
 
       $q5 = $this->app->db->query( "SELECT * FROM vehicles 
         WHERE vehicle_uuid = \"{$vehicleUuid}\" AND user_id = {$userId} AND deleted = 0" );
-  
+    
       if ( !$q5->num_rows ) {
         $this->printError( 404, 1915 );
       }
@@ -2753,69 +3369,158 @@ class Api {
 
       if ( $vehicleRetailValue > 1000000 ) $this->printError( 403, 1917 );
 
-      $rate = (function() use( $userAge, $vehicleRetailValue ) : array|bool {
-        if ( $userAge < 25 ) {
-          return false;
+      $totalCost = 0.0;
+      $product = "";
+
+      if ( $estimationType === "estimation" ) {
+        if ( !is_array( $subProductsUuids ) ) $subProductsUuids = [];
+
+        $productsCost = 0.0;
+
+        $q6 = $this->app->db->query( "SELECT * FROM main_products WHERE product_uuid = \"{$mainProductUuid}\" AND deleted = 0" );
+
+        if ( !$q6->num_rows ) {
+          $this->printError( 404, 1911 );
         }
-        else if ( $userAge >= 25 && $userAge <= 45 ) {
-          if ( $vehicleRetailValue <= 100000 ) 
-            return [ 0.0199, "rating_age25-45_price100000" ];
-          else if ( $vehicleRetailValue > 100000 && $vehicleRetailValue <= 350000 ) 
-            return [ 0.0195, "rating_age25-45_price100000-350000" ];
-          else if ( $vehicleRetailValue > 350000 && $vehicleRetailValue <= 700000 ) 
-            return [ 0.0171, "rating_age25-45_price350000-700000" ];
-          else if ( $vehicleRetailValue > 700000 && $vehicleRetailValue <= 1000000 ) 
-            return [ 0.0165, "rating_age25-45_price700000-1000000" ];
+
+        $mainProduct = $q6->fetch_assoc();
+        $q6->free();
+
+        $mainProductId = intval( $mainProduct['main_product_id'] );
+
+        $mainProductCost = floatval( $mainProduct['cost'] );
+        $productsCost += $mainProductCost;
+
+        $subProducts = [];
+
+        foreach( $subProductsUuids as $subProductUuid ) {
+          $subProductUuid = $this->app->db->extendedEscape( $subProductUuid );
+
+          $q7 = $this->app->db->query( "SELECT * FROM sub_products 
+            WHERE product_uuid = \"{$subProductUuid}\" AND main_product_id = {$mainProductId} AND deleted = 0" );
+
+          if ( !$q7->num_rows ) {
+            $this->printError( 404, 1912 );
+          }
+    
+          while( $subProduct = $q7->fetch_assoc() ) {
+            $subProductCost = floatval( $subProduct['cost'] );
+            $productsCost += $subProductCost;
+
+            $subProducts[] = [
+              'subProductId' => $subProduct['product_uuid'],
+              'subProductName' => $subProduct['product_name'],
+              'subProductCost' => $subProductCost,
+            ];
+          }
+
+          $q7->free();
         }
-        else if ( $userAge > 45 && $userAge < 85 ) {
-          if ( $vehicleRetailValue <= 100000 ) 
-            return [ 0.014, "rating_age45-85_price100000" ];
-          else if ( $vehicleRetailValue > 100000 && $vehicleRetailValue <= 350000 ) 
-            return [ 0.0136, "rating_age45-85_price100000-350000" ];
-          else if ( $vehicleRetailValue > 350000 && $vehicleRetailValue <= 700000 ) 
-            return [ 0.012, "rating_age45-85_price350000-700000" ];
-          else if ( $vehicleRetailValue > 700000 && $vehicleRetailValue <= 1000000 ) 
-            return [ 0.0115, "rating_age45-85_price700000-1000000" ];
+
+        $rate = (function() use( $userAge, $vehicleRetailValue ) : array|bool {
+          if ( $userAge < 25 ) {
+            return false;
+          }
+          else if ( $userAge >= 25 && $userAge <= 45 ) {
+            if ( $vehicleRetailValue <= 100000 ) 
+              return [ 0.0199, "rating_age25-45_price100000" ];
+            else if ( $vehicleRetailValue > 100000 && $vehicleRetailValue <= 350000 ) 
+              return [ 0.0195, "rating_age25-45_price100000-350000" ];
+            else if ( $vehicleRetailValue > 350000 && $vehicleRetailValue <= 700000 ) 
+              return [ 0.0171, "rating_age25-45_price350000-700000" ];
+            else if ( $vehicleRetailValue > 700000 && $vehicleRetailValue <= 1000000 ) 
+              return [ 0.0165, "rating_age25-45_price700000-1000000" ];
+          }
+          else if ( $userAge > 45 && $userAge < 85 ) {
+            if ( $vehicleRetailValue <= 100000 ) 
+              return [ 0.014, "rating_age45-85_price100000" ];
+            else if ( $vehicleRetailValue > 100000 && $vehicleRetailValue <= 350000 ) 
+              return [ 0.0136, "rating_age45-85_price100000-350000" ];
+            else if ( $vehicleRetailValue > 350000 && $vehicleRetailValue <= 700000 ) 
+              return [ 0.012, "rating_age45-85_price350000-700000" ];
+            else if ( $vehicleRetailValue > 700000 && $vehicleRetailValue <= 1000000 ) 
+              return [ 0.0115, "rating_age45-85_price700000-1000000" ];
+          }
+          else {
+            return false;
+          }
+        })();
+
+        if ( !$rate ) {
+          $this->printError( 403, 1916 );
+        }
+
+        $q11 = $this->app->db->query( "SELECT * FROM resources WHERE r_key = \"{$rate[1]}\"" );
+
+        if ( $q11->num_rows ) {
+          $rate = floatval( $q11->fetch_assoc()['r_value'] );
+          $q11->free();
         }
         else {
-          return false;
+          // default value
+          $rate = $rate[0];
         }
-      })();
 
-      if ( !$rate ) {
-        $this->printError( 403, 1916 );
+        $totalCost = round( $vehicleRetailValue * $rate / 12 + $productsCost, 2 );
+
+        $product = $this->app->db->extendedEscape(json_encode(
+          [
+            'mainProductId' => $mainProduct['product_uuid'],
+            'mainProductName' => $mainProduct['product_name'],
+            'mainProductCost' => $mainProductCost,
+            'subProducts' => $subProducts,
+          ], JSON_UNESCAPED_UNICODE), 
+          htmlspecialchars: false, 
+          cleanNL: false
+        );
       }
+      else if ( $estimationType === "accessory" ) {
+        if ( !is_array( $accessoriesUuids ) ) $accessoriesUuids = [];
 
-      $q11 = $this->app->db->query( "SELECT * FROM resources WHERE r_key = \"{$rate[1]}\"" );
+        $accessoriesCost = 0.0;
+        $accessories = [];
 
-      if ( $q11->num_rows ) {
-        $rate = floatval( $q11->fetch_assoc()['r_value'] );
-        $q11->free();
+        foreach( $accessoriesUuids as $accessoryUuid ) {
+          $accessoryUuid = $this->app->db->extendedEscape( $accessoryUuid );
+
+          $q7 = $this->app->db->query( "SELECT * FROM accessories 
+            WHERE accessory_uuid = \"{$accessoryUuid}\" AND deleted = 0" );
+
+          if ( !$q7->num_rows ) {
+            $this->printError( 404, 1919 );
+          }
+
+          $accessory = $q7->fetch_assoc();
+          $q7->free();
+    
+          $accessoryCost = floatval( $accessory['cost'] );
+          $accessoriesCost += $accessoryCost;
+
+          $accessories[] = [
+            'accessoryId' => $accessory['accessory_uuid'],
+            'accessoryName' => $accessory['name'],
+            'accessoryCost' => $accessoryCost,
+          ];
+        }
+
+        $product = $this->app->db->extendedEscape(
+          json_encode($accessories, JSON_UNESCAPED_UNICODE),
+          htmlspecialchars: false,
+          cleanNL: false
+        );
+
+        $totalCost = round( $accessoriesCost * 0.03 / 12, 2 );
       }
-      else {
-        // default value
-        $rate = $rate[0];
-      }
-
-      $totalCost = round( $vehicleRetailValue * $rate / 12 + $productsCost, 2 );
-
-      $product = $this->app->db->escape(json_encode([
-        'mainProductId' => $mainProduct['product_uuid'],
-        'mainProductName' => $mainProduct['product_name'],
-        'mainProductCost' => $mainProductCost,
-        'subProducts' => $subProducts,
-      ], JSON_UNESCAPED_UNICODE));
-
-      
 
       $estimationTableDataset = [];
 
       $estimationTableDataset['estimation_uuid'] = Utils::generateUUID4();
+      $estimationTableDataset['type'] = $estimationType;
       $estimationTableDataset['products'] = $product;
       $estimationTableDataset['user_id'] = $userId;
       $estimationTableDataset['rating_id'] = $ratingId;
       $estimationTableDataset['vehicle_id'] = $vehicleId;
-      $estimationTableDataset['vehicle_details'] = $this->app->db->escape( $vehicle['details'] );
+      $estimationTableDataset['vehicle_details'] = $this->app->db->extendedEscape( $vehicle['details'] );
       $estimationTableDataset['vehicle_retail_value'] = $vehicleRetailValue;
       $estimationTableDataset['total_cost'] = $totalCost;
       $estimationTableDataset['is_used'] = 0;
@@ -2848,7 +3553,7 @@ class Api {
         'to_username' => '',
         'entity_id' => $estimationId,
         'action' => 'insert',
-        'fields' => $this->app->db->escape( $sqlSliceEstimation ),
+        'fields' => $this->app->db->extendedEscape( $sqlSliceEstimation ),
         'where_clause' => '',
         'description' => 'inserted estimation',
         'created' => $currentTime,
@@ -2862,19 +3567,35 @@ class Api {
       $dt->setTimestamp( $currentTime );
       $estimationCreated = $this->formatDateTimeRepresentation( $dt );
 
-      $this->printResponse([
-        'estimationId' => $estimationTableDataset['estimation_uuid'],
-        'accountId' => $userUuid,
-        'vehicleId' => $vehicleUuid,
-        'vehicleDetails' => $vehicle['details'],
-        'vehicleRetailValue' => $vehicleRetailValue,
-        'mainProductId' => $mainProduct['product_uuid'],
-        'mainProductName' => $mainProduct['product_name'],
-        'mainProductCost' => $mainProductCost,
-        'subProducts' => $subProducts,
-        'totalCost' => $totalCost,
-        'created' => $estimationCreated,
-      ]);
+      if ( $estimationTableDataset['type'] === "estimation" ) {
+        $this->printResponse([
+          'estimationId' => $estimationTableDataset['estimation_uuid'],
+          'estimationType' => $estimationTableDataset['type'],
+          'accountId' => $userUuid,
+          'vehicleId' => $vehicleUuid,
+          'vehicleDetails' => $vehicle['details'],
+          'vehicleRetailValue' => $vehicleRetailValue,
+          'mainProductId' => $mainProduct['product_uuid'],
+          'mainProductName' => $mainProduct['product_name'],
+          'mainProductCost' => $mainProductCost,
+          'subProducts' => $subProducts,
+          'totalCost' => $totalCost,
+          'created' => $estimationCreated,
+        ]);
+      }
+      else if ( $estimationTableDataset['type'] === "accessory" ) {
+        $this->printResponse([
+          'estimationId' => $estimationTableDataset['estimation_uuid'],
+          'estimationType' => $estimationTableDataset['type'],
+          'accountId' => $userUuid,
+          'vehicleId' => $vehicleUuid,
+          'vehicleDetails' => $vehicle['details'],
+          'vehicleRetailValue' => $vehicleRetailValue,
+          'accessories' => $accessories ?? [],
+          'totalCost' => $totalCost,
+          'created' => $estimationCreated,
+        ]);
+      }
     }
     else {
       $this->printError( 405, 106 );
@@ -2891,9 +3612,9 @@ class Api {
     $currentTime = $dt->getTimestamp();
 
     if ( $this->app->requestMethod === 'GET' ) {
-      $orderUuid = $this->app->db->escape( $this->app->get['orderId'] ?? "" );
-      $userUuid = $myRole === 'admin' ? $this->app->db->escape( $this->app->get['accountId'] ?? "" ) : $this->app->user['user_uuid'];
-      $orderStatus = $this->app->db->escape( $this->app->get['orderStatus'] ?? "" );
+      $orderUuid = $this->app->db->extendedEscape( $this->app->get['orderId'] ?? "" );
+      $userUuid = $myRole === 'admin' ? $this->app->db->extendedEscape( $this->app->get['accountId'] ?? "" ) : $this->app->user['user_uuid'];
+      $orderStatus = $this->app->db->extendedEscape( $this->app->get['orderStatus'] ?? "" );
       $showDeleted = $myRole === 'admin' ? boolval( $this->app->get['showDeleted'] ?? false ) : false;
 
       $sqlWhereAndConditionHideDeleted = !$showDeleted ? " AND deleted = 0" : "";
@@ -2911,7 +3632,7 @@ class Api {
         $limit = intval( $this->app->get['limit'] ?? Settings::PAGINATION_MAX_LIMIT );
         $limit = $limit <= Settings::PAGINATION_MAX_LIMIT ? $limit : Settings::PAGINATION_MAX_LIMIT;
 
-        $sqlOrder = $this->app->db->escape( $this->app->get['order'] ?? "" );
+        $sqlOrder = $this->app->db->extendedEscape( $this->app->get['order'] ?? "" );
 
         $orderBy = "o.created DESC";
 
@@ -2981,7 +3702,7 @@ class Api {
         $limit = intval( $this->app->get['limit'] ?? Settings::PAGINATION_MAX_LIMIT );
         $limit = $limit <= Settings::PAGINATION_MAX_LIMIT ? $limit : Settings::PAGINATION_MAX_LIMIT;
 
-        $sqlOrder = $this->app->db->escape( $this->app->get['order'] ?? "" );
+        $sqlOrder = $this->app->db->extendedEscape( $this->app->get['order'] ?? "" );
 
         $orderBy = "created DESC";
 
@@ -3009,7 +3730,7 @@ class Api {
         $limit = intval( $this->app->get['limit'] ?? Settings::PAGINATION_MAX_LIMIT );
         $limit = $limit <= Settings::PAGINATION_MAX_LIMIT ? $limit : Settings::PAGINATION_MAX_LIMIT;
 
-        $sqlOrder = $this->app->db->escape( $this->app->get['order'] ?? "" );
+        $sqlOrder = $this->app->db->extendedEscape( $this->app->get['order'] ?? "" );
 
         $orderBy = "created DESC";
 
@@ -3073,67 +3794,77 @@ class Api {
           $dt->setTimestamp( intval( $estimation['created'] ) );
           $estimationCreated = $this->formatDateTimeRepresentation( $dt );
 
-          $product = null;
           $subProducts = [];
+          $accessories = [];
 
           $product = @json_decode( $estimation['products'] );
-          $mainProductUuid = $this->app->db->escape( $product->mainProductId ?? "" );
 
-          $mainProductName = $product->mainProductName ?? "";
-          $mainProductCost = floatval( $product->mainProductCost ?? 0.0 );
-          
-          if ( 
-            !is_object( $product ) 
-            || empty( $mainProductUuid ) 
-            || !isset( $product->subProducts ) 
-            || !is_array( $product->subProducts ) 
-          ) {
-            continue;
+          if ( $estimation['type'] === "estimation" ) {
+            $mainProductUuid = $this->app->db->extendedEscape( $product->mainProductId ?? "" );
+
+            $mainProductName = $product->mainProductName ?? "";
+            $mainProductCost = floatval( $product->mainProductCost ?? 0.0 );
+            
+            if ( 
+              !is_object( $product ) 
+              || empty( $mainProductUuid ) 
+              || !isset( $product->subProducts ) 
+              || !is_array( $product->subProducts ) 
+            ) {
+              continue;
+            }
+
+            $q6 = $this->app->db->query( "SELECT * FROM main_products WHERE product_uuid = \"{$mainProductUuid}\"" );
+
+            if ( !$q6->num_rows ) continue;
+
+            $mainProduct = $q6->fetch_assoc();
+            $q6->free();
+
+            $mainProductId = intval( $mainProduct['main_product_id'] );
+            $mainProductIsDeleted = boolval( $mainProduct['deleted'] );
+
+            foreach( $product->subProducts as $i => $subProduct ) {
+              $subProductUuid = $this->app->db->extendedEscape( $subProduct->subProductId ?? "" );
+
+              $q7 = $this->app->db->query( "SELECT * FROM sub_products WHERE product_uuid = \"{$subProductUuid}\"" );
+
+              if ( !$q7->num_rows ) continue;
+
+              $subProductRow = $q7->fetch_assoc();
+              $q7->free();
+
+              $subProductName = $subProduct->subProductName ?? "";
+              $subProductCost = floatval( $subProduct->subProductCost ?? 0.0 );
+
+              $subProductIsDeleted = boolval( $subProductRow['deleted'] );
+
+              $subProducts[] = [
+                'subProductId' => $subProductUuid,
+                'subProductName' => $subProductName,
+                'subProductCost' => $subProductCost,
+                'subProductIsDeleted' => $subProductIsDeleted,
+              ];
+            }
+      
+            $categoryId = intval( $mainProduct['category_id'] );
+      
+            $q2 = $this->app->db->query( "SELECT * FROM categories WHERE category_id = {$categoryId}" );
+      
+            if ( !$q2->num_rows ) {
+              continue;
+            }
+
+            $category = $q2->fetch_assoc();
+            $q2->free();
           }
+          else if ( $estimation['type'] === "accessory" ) {
+            if ( !is_array( $product ) ) {
+              continue;
+            }
 
-          $q6 = $this->app->db->query( "SELECT * FROM main_products WHERE product_uuid = \"{$mainProductUuid}\"" );
-
-          if ( !$q6->num_rows ) continue;
-
-          $mainProduct = $q6->fetch_assoc();
-          $q6->free();
-
-          $mainProductId = intval( $mainProduct['main_product_id'] );
-          $mainProductIsDeleted = boolval( $mainProduct['deleted'] );
-
-          foreach( $product->subProducts as $i => $subProduct ) {
-            $subProductUuid = $this->app->db->escape( $subProduct->subProductId ?? "" );
-
-            $q7 = $this->app->db->query( "SELECT * FROM sub_products WHERE product_uuid = \"{$subProductUuid}\"" );
-
-            if ( !$q7->num_rows ) continue;
-
-            $subProductRow = $q7->fetch_assoc();
-            $q7->free();
-
-            $subProductName = $subProduct->subProductName ?? "";
-            $subProductCost = floatval( $subProduct->subProductCost ?? 0.0 );
-
-            $subProductIsDeleted = boolval( $subProductRow['deleted'] );
-
-            $subProducts[] = [
-              'subProductId' => $subProductUuid,
-              'subProductName' => $subProductName,
-              'subProductCost' => $subProductCost,
-              'subProductIsDeleted' => $subProductIsDeleted,
-            ];
+            $accessories = $product;
           }
-    
-          $categoryId = intval( $mainProduct['category_id'] );
-    
-          $q2 = $this->app->db->query( "SELECT * FROM categories WHERE category_id = {$categoryId}" );
-    
-          if ( !$q2->num_rows ) {
-            continue;
-          }
-
-          $category = $q2->fetch_assoc();
-          $q2->free();
 
           $q3 = $this->app->db->query( "SELECT * FROM users WHERE user_id = {$userId}" );
     
@@ -3198,28 +3929,50 @@ class Api {
 
           $allEstimationsTotalCost += $totalCost;
 
-          $estimations[] = [
-            'estimationId' => $estimation['estimation_uuid'],
-            'accountId' => $user['user_uuid'],
-            'username' => $user['username'],
-            'firstName' => $user['first_name'],
-            'lastName' => $user['last_name'],
-            'vehicleId' => $vehicle['vehicle_uuid'],
-            'vehicleDetails' => $vehicleDetails,
-            'vehicleRetailValue' => $vehicleRetailValue,
-            'vehicleIsDeleted' => $vehicleIsDeleted,
-            'vehicleAssets' => $vehicleAssets,
-            'categoryId' => $category['category_uuid'],
-            'categoryName' => $category['category_name'],
-            'mainProductId' => $mainProduct['product_uuid'],
-            'mainProductName' => $mainProductName,
-            'mainProductCost' => $mainProductCost,
-            'mainProductIsDeleted' => $mainProductIsDeleted,
-            'subProducts' => $subProducts,
-            'totalCost' => $totalCost,
-            'estimationCreated' => $estimationCreated,
-            'estimationIsDeleted' => $estimationIsDeleted,
-          ];
+          if ( $estimation['type'] === "estimation" ) {
+            $estimations[] = [
+              'estimationId' => $estimation['estimation_uuid'],
+              'estimationType' => $estimation['type'],
+              'accountId' => $user['user_uuid'],
+              'username' => $user['username'],
+              'firstName' => $user['first_name'],
+              'lastName' => $user['last_name'],
+              'vehicleId' => $vehicle['vehicle_uuid'],
+              'vehicleDetails' => $vehicleDetails,
+              'vehicleRetailValue' => $vehicleRetailValue,
+              'vehicleIsDeleted' => $vehicleIsDeleted,
+              'vehicleAssets' => $vehicleAssets,
+              'categoryId' => $category['category_uuid'],
+              'categoryName' => $category['category_name'],
+              'mainProductId' => $mainProduct['product_uuid'],
+              'mainProductName' => $mainProductName,
+              'mainProductCost' => $mainProductCost,
+              'mainProductIsDeleted' => $mainProductIsDeleted,
+              'subProducts' => $subProducts,
+              'totalCost' => $totalCost,
+              'estimationCreated' => $estimationCreated,
+              'estimationIsDeleted' => $estimationIsDeleted,
+            ];
+          }
+          else if ( $estimation['type'] === "accessory" ) {
+            $estimations[] = [
+              'estimationId' => $estimation['estimation_uuid'],
+              'estimationType' => $estimation['type'],
+              'accountId' => $user['user_uuid'],
+              'username' => $user['username'],
+              'firstName' => $user['first_name'],
+              'lastName' => $user['last_name'],
+              'vehicleId' => $vehicle['vehicle_uuid'],
+              'vehicleDetails' => $vehicleDetails,
+              'vehicleRetailValue' => $vehicleRetailValue,
+              'vehicleIsDeleted' => $vehicleIsDeleted,
+              'vehicleAssets' => $vehicleAssets,
+              'accessories' => $accessories,
+              'totalCost' => $totalCost,
+              'estimationCreated' => $estimationCreated,
+              'estimationIsDeleted' => $estimationIsDeleted,
+            ];
+          }
         }
 
         $q00->free();
@@ -3297,10 +4050,10 @@ class Api {
 
       // create order
       $estimationUuids = $data->estimationIds ?? null;
-      $userUuid = $myRole === 'admin' ? $this->app->db->escape( $data->accountId ?? $this->app->user['user_uuid'] ) : $this->app->user['user_uuid'];
+      $userUuid = $myRole === 'admin' ? $this->app->db->extendedEscape( $data->accountId ?? $this->app->user['user_uuid'] ) : $this->app->user['user_uuid'];
       // update order
-      $orderUuid = $this->app->db->escape( $data->orderId ?? "" );
-      $orderStatus = $this->app->db->escape( $data->orderStatus ?? "" );
+      $orderUuid = $this->app->db->extendedEscape( $data->orderId ?? "" );
+      $orderStatus = $this->app->db->extendedEscape( $data->orderStatus ?? "" );
       $adjustedCost = floatval( $data->adjustedCost ?? -1 );
       $orderDeleted = -1;
 
@@ -3395,7 +4148,7 @@ class Api {
           'to_username' => '',
           'entity_id' => $orderId,
           'action' => 'insert',
-          'fields' => $this->app->db->escape( $sqlSliceOrders ),
+          'fields' => $this->app->db->extendedEscape( $sqlSliceOrders ),
           'where_clause' => '',
           'description' => 'inserted order',
           'created' => $currentTime,
@@ -3456,8 +4209,8 @@ class Api {
           'to_username' => '',
           'entity_id' => '',
           'action' => 'update',
-          'fields' => $this->app->db->escape( $sqlSliceOrders ),
-          'where_clause' => $this->app->db->escape( "order_uuid = \"{$orderUuid}\"" ),
+          'fields' => $this->app->db->extendedEscape( $sqlSliceOrders ),
+          'where_clause' => $this->app->db->extendedEscape( "order_uuid = \"{$orderUuid}\"" ),
           'description' => 'updated order',
           'created' => $currentTime,
           'deleted' => 0 
@@ -3521,11 +4274,15 @@ class Api {
       $q9->free();
 
       if ( $mode === 'update' && mb_strlen( $orderStatus ) > 0 && $myRole === 'admin' ) {
-        $this->sendMail([
+        $emailIsSent = $this->sendMail([
           'to' => $user['email'],
           'subject' => 'Order status has changed',
           'body' => "Your order has been <b>{$orderStatus}</b>.<br><br>\n\nThis message is generated automatically. Don't reply it.",
         ]);
+
+        if ( !$emailIsSent ) {
+          $this->printError( 500, 1021 );
+        }
       }
 
       $dt = new \DateTime();
@@ -3562,8 +4319,8 @@ class Api {
     $currentTime = $dt->getTimestamp();
 
     if ( $this->app->requestMethod === 'GET' ) {
-      $filter = $this->app->db->escape( $this->app->get['fileType'] ?? "" );
-      $userUuid = $myRole === 'admin' ? $this->app->db->escape( $this->app->get['accountId'] ?? "" ) : $this->app->user['user_uuid'];
+      $filter = $this->app->db->extendedEscape( $this->app->get['fileType'] ?? "" );
+      $userUuid = $myRole === 'admin' ? $this->app->db->extendedEscape( $this->app->get['accountId'] ?? "" ) : $this->app->user['user_uuid'];
       $showDeleted = $myRole === 'admin' ? boolval( $this->app->get['showDeleted'] ?? false ) : false;
 
       $sqlWhereAndConditionHideDeleted = !$showDeleted ? " AND deleted = 0" : "";
@@ -3710,10 +4467,10 @@ class Api {
         }
 
         // meta
-        $fileType = $this->app->db->escape( $data->fileType ?? "" );
-        $description = $this->app->db->escape( strip_tags( $data->description ?? "" ) );
-        $relatedTo = $this->app->db->escape( $data->relatedTo ?? "" );
-        $relationId = $this->app->db->escape( $data->relationId ?? "" );
+        $fileType = $this->app->db->extendedEscape( $data->fileType ?? "" );
+        $description = $this->app->db->extendedEscape( $data->description ?? "" );
+        $relatedTo = $this->app->db->extendedEscape( $data->relatedTo ?? "" );
+        $relationId = $this->app->db->extendedEscape( $data->relationId ?? "" );
 
         $userUuid = $this->app->user['user_uuid'];
         $userFolder = $this->app->assetsDir . "/{$userUuid}";
@@ -3920,7 +4677,7 @@ class Api {
   
           $q2->free();
   
-          $userFilePath = $this->app->db->escape( $userFolder . "/{$newFileName}" );
+          $userFilePath = $this->app->db->extendedEscape( $userFolder . "/{$newFileName}" );
   
           if ( !move_uploaded_file( $filename, $userFolderFullPath . "/{$newFileName}" ) ) {
             //$this->deleteUploadedFiles( $this->app->files['asset']['tmp_name'] );
@@ -3968,7 +4725,7 @@ class Api {
             'to_username' => '',
             'entity_id' => $assetId,
             'action' => 'insert',
-            'fields' => $this->app->db->escape( $sqlSliceAssets ),
+            'fields' => $this->app->db->extendedEscape( $sqlSliceAssets ),
             'where_clause' => '',
             'description' => 'inserted asset',
             'created' => $currentTime,
@@ -4016,8 +4773,8 @@ class Api {
           $this->printError( 403, 1090 );
         }
 
-        $assetUuid = $this->app->db->escape( $data->assetId ?? "" );
-        $userUuid = $myRole === 'admin' ? $this->app->db->escape( $data->accountId ?? $this->app->user['user_uuid'] ) : $this->app->user['user_uuid'];
+        $assetUuid = $this->app->db->extendedEscape( $data->assetId ?? "" );
+        $userUuid = $myRole === 'admin' ? $this->app->db->extendedEscape( $data->accountId ?? $this->app->user['user_uuid'] ) : $this->app->user['user_uuid'];
 
         if ( $myRole === 'admin' ) {
           $q1 = $this->app->db->query( "SELECT asset_id FROM assets WHERE asset_uuid = \"{$assetUuid}\"" );
@@ -4058,7 +4815,7 @@ class Api {
           'to_username' => '',
           'action' => 'update',
           'fields' => 'deleted = 1',
-          'where_clause' => $this->app->db->escape( "asset_uuid = \"{$assetUuid}\"" ),
+          'where_clause' => $this->app->db->extendedEscape( "asset_uuid = \"{$assetUuid}\"" ),
           'description' => 'updated asset',
           'created' => $currentTime,
           'deleted' => 0 
@@ -4092,14 +4849,14 @@ class Api {
     $currentTime = $dt->getTimestamp();
 
     if ( $this->app->requestMethod === 'GET' ) {
-      $userUuid = $this->app->db->escape( $this->app->get['accountId'] ?? "" );
-      $username = $this->app->db->escape( $this->app->get['username'] ?? "" );
-      $firstName = $this->app->db->escape( $this->app->get['firstName'] ?? "" );
-      $lastName = $this->app->db->escape( $this->app->get['lastName'] ?? "" );
-      $clientIdNumber = $this->app->db->escape( $this->app->get['clientIdNumber'] ?? "" );
-      $cellphone = $this->app->db->escape( $this->app->get['cellphone'] ?? "" );
-      $email = $this->app->db->escape( $this->app->get['email'] ?? "" );
-      $role = $this->app->db->escape( $this->app->get['role'] ?? "" );
+      $userUuid = $this->app->db->extendedEscape( $this->app->get['accountId'] ?? "" );
+      $username = $this->app->db->extendedEscape( $this->app->get['username'] ?? "" );
+      $firstName = $this->app->db->extendedEscape( $this->app->get['firstName'] ?? "" );
+      $lastName = $this->app->db->extendedEscape( $this->app->get['lastName'] ?? "" );
+      $clientIdNumber = $this->app->db->extendedEscape( $this->app->get['clientIdNumber'] ?? "" );
+      $cellphone = $this->app->db->extendedEscape( $this->app->get['cellphone'] ?? "" );
+      $email = $this->app->db->extendedEscape( $this->app->get['email'] ?? "" );
+      $role = $this->app->db->extendedEscape( $this->app->get['role'] ?? "" );
       $showDeleted = $myRole === 'admin' ? boolval( $this->app->get['showDeleted'] ?? false ) : false;
 
       $sqlWhereAndConditionHideDeleted = !$showDeleted ? " AND deleted = 0" : "";
@@ -4122,8 +4879,8 @@ class Api {
         || mb_strlen( $email ) > 0
         || $roleIsSpecified
       ) {
-        $sqlFilter = $this->app->db->escape( $this->app->get['filter'] ?? "" );
-        $sqlOrder = $this->app->db->escape( $this->app->get['order'] ?? "" );
+        $sqlFilter = $this->app->db->extendedEscape( $this->app->get['filter'] ?? "" );
+        $sqlOrder = $this->app->db->extendedEscape( $this->app->get['order'] ?? "" );
         $offset = intval( $this->app->get['offset'] ?? 0 );
         $limit = intval( $this->app->get['limit'] ?? Settings::PAGINATION_MAX_LIMIT );
         $limit = $limit <= Settings::PAGINATION_MAX_LIMIT ? $limit : Settings::PAGINATION_MAX_LIMIT;
@@ -4230,7 +4987,7 @@ class Api {
         $limit = intval( $this->app->get['limit'] ?? Settings::PAGINATION_MAX_LIMIT );
         $limit = $limit <= Settings::PAGINATION_MAX_LIMIT ? $limit : Settings::PAGINATION_MAX_LIMIT;
 
-        $sqlOrder = $this->app->db->escape( $this->app->get['order'] ?? "" );
+        $sqlOrder = $this->app->db->extendedEscape( $this->app->get['order'] ?? "" );
 
         $orderBy = "created ASC";
 
@@ -4302,91 +5059,127 @@ class Api {
         $vehicles = [];
 
         while( $vehicle = $q4->fetch_assoc() ) {
+          $vehicleId = intval( $vehicle['vehicle_id'] );
+
           $dt->setTimestamp( intval( $vehicle['created'] ) );
           $vehicleCreated = $this->formatDateTimeRepresentation( $dt );
 
           $dt->setTimestamp( intval( $vehicle['updated'] ) );
           $vehicleUpdated = $this->formatDateTimeRepresentation( $dt );
 
-          if ( !array_key_exists( $vehicle['vehicle_uuid'], $vehicles ) ) {
-            $assets = [];
+          $assets = [];
 
-            $q700 = $this->app->db->query( "SELECT * FROM assets WHERE related_to = \"vehicles\" AND relation_uuid = \"{$vehicle['vehicle_uuid']}\"" );
+          $q700 = $this->app->db->query( "SELECT * FROM assets WHERE related_to = \"vehicles\" AND relation_uuid = \"{$vehicle['vehicle_uuid']}\"" );
 
-            while( $asset = $q700->fetch_assoc() ) {
-              $dt->setTimestamp( intval( $asset['created'] ) );
-              $assetCreated = $this->formatDateTimeRepresentation( $dt );
-
-              if ( $myRole === 'admin' ) {
-                $assets[] = [
-                  'assetId' => $asset['asset_uuid'],
-                  'relatedTo' => $asset['related_to'],
-                  'description' => nl2br( $asset['description'] ),
-                  'fileType' => $asset['file_type'],
-                  'path' => $asset['path'],
-                  'created' => $assetCreated,
-                  'deleted' => boolval( $asset['deleted'] ),
-                ];
-              }
-              else {
-                $assets[] = [
-                  'assetId' => $asset['asset_uuid'],
-                  'relatedTo' => $asset['related_to'],
-                  'description' => nl2br( $asset['description'] ),
-                  'fileType' => $asset['file_type'],
-                  'path' => $asset['path'],
-                ];
-              }
-            }
-
-            $q700->free();
+          while( $asset = $q700->fetch_assoc() ) {
+            $dt->setTimestamp( intval( $asset['created'] ) );
+            $assetCreated = $this->formatDateTimeRepresentation( $dt );
 
             if ( $myRole === 'admin' ) {
-              $vehicles[ $vehicle['vehicle_uuid'] ] = [
-                'vehicleId' => $vehicle['vehicle_uuid'],
-                'details' => $vehicle['details'],
-                'assets' => $assets,
-                'regNumber' => $vehicle['reg_number'],
-                'vin' => $vehicle['vin'],
-                'engine' => $vehicle['engine'],
-                'overnightParkingVehicle' => $vehicle['overnight_parking_vehicle'],
-                'year' => intval( $vehicle['year'] ),
-                'retailValue' => intval( $vehicle['retail_value'] ),
-                'trackingDevice' => $vehicle['tracking_device'],
-                'useCase' => $vehicle['use_case'],
-                'businessDescription' => $vehicle['business_description'],
-                'accessories' => $vehicle['accessories'],
-                'created' => $vehicleCreated,
-                'updated' => $vehicleUpdated,
-                'deleted' => boolval( $vehicle['deleted'] ),
+              $assets[] = [
+                'assetId' => $asset['asset_uuid'],
+                'relatedTo' => $asset['related_to'],
+                'description' => nl2br( $asset['description'] ),
+                'fileType' => $asset['file_type'],
+                'path' => $asset['path'],
+                'created' => $assetCreated,
+                'deleted' => boolval( $asset['deleted'] ),
               ];
             }
             else {
-              $vehicles[ $vehicle['vehicle_uuid'] ] = [
-                'vehicleId' => $vehicle['vehicle_uuid'],
-                'details' => $vehicle['details'],
-                'assets' => $assets,
-                'regNumber' => $vehicle['reg_number'],
-                'vin' => $vehicle['vin'],
-                'engine' => $vehicle['engine'],
-                'overnightParkingVehicle' => $vehicle['overnight_parking_vehicle'],
-                'year' => intval( $vehicle['year'] ),
-                'retailValue' => intval( $vehicle['retail_value'] ),
-                'trackingDevice' => $vehicle['tracking_device'],
-                'useCase' => $vehicle['use_case'],
-                'businessDescription' => $vehicle['business_description'],
-                'accessories' => $vehicle['accessories'],
-                'created' => $vehicleCreated,
-                'updated' => $vehicleUpdated,
-                'deleted' => boolval( $vehicle['deleted'] ),
+              $assets[] = [
+                'assetId' => $asset['asset_uuid'],
+                'relatedTo' => $asset['related_to'],
+                'description' => nl2br( $asset['description'] ),
+                'fileType' => $asset['file_type'],
+                'path' => $asset['path'],
               ];
             }
+          }
+
+          $q700->free();
+
+          $accessories = [];
+
+          $q800 = $this->app->db->query( "SELECT * FROM accessories WHERE vehicle_id = {$vehicleId} AND deleted = 0" );
+
+          while( $accessory = $q800->fetch_assoc() ) {
+            $dt->setTimestamp( intval( $accessory['created'] ) );
+            $accessoryCreated = $this->formatDateTimeRepresentation( $dt );
+
+            $dt->setTimestamp( intval( $accessory['updated'] ) );
+            $accessoryUpdated = $this->formatDateTimeRepresentation( $dt );
+
+            if ( $myRole === 'admin' ) {
+              $accessories[] = [
+                'accessoryId' => $accessory['accessory_uuid'],
+                'name' => $accessory['name'],
+                'description' => nl2br( $accessory['description'] ),
+                'cost' => floatval( $accessory['cost'] ),
+                'created' => $accessoryCreated,
+                'updated' => $accessoryUpdated,
+                'deleted' => boolval( $accessory['deleted'] ),
+              ];
+            }
+            else {
+              $accessories[] = [
+                'accessoryId' => $accessory['accessory_uuid'],
+                'name' => $accessory['name'],
+                'description' => nl2br( $accessory['description'] ),
+                'cost' => floatval( $accessory['cost'] ),
+              ];
+            }
+          }
+
+          $q800->free();
+
+          if ( $myRole === 'admin' ) {
+            $vehicles[] = [
+              'vehicleId' => $vehicle['vehicle_uuid'],
+              'details' => $vehicle['details'],
+              'assets' => $assets,
+              'regNumber' => $vehicle['reg_number'],
+              'vin' => $vehicle['vin'],
+              'engine' => $vehicle['engine'],
+              'overnightParkingVehicle' => $vehicle['overnight_parking_vehicle'],
+              'year' => intval( $vehicle['year'] ),
+              'retailValue' => intval( $vehicle['retail_value'] ),
+              'trackingDevice' => $vehicle['tracking_device'],
+              'useCase' => $vehicle['use_case'],
+              'businessDescription' => $vehicle['business_description'],
+              'financed' => boolval( $vehicle['financed'] ),
+              'financeHouse' => $vehicle['finance_house'],
+              'accessories' => $accessories,
+              'created' => $vehicleCreated,
+              'updated' => $vehicleUpdated,
+              'deleted' => boolval( $vehicle['deleted'] ),
+            ];
+          }
+          else {
+            $vehicles[] = [
+              'vehicleId' => $vehicle['vehicle_uuid'],
+              'details' => $vehicle['details'],
+              'assets' => $assets,
+              'regNumber' => $vehicle['reg_number'],
+              'vin' => $vehicle['vin'],
+              'engine' => $vehicle['engine'],
+              'overnightParkingVehicle' => $vehicle['overnight_parking_vehicle'],
+              'year' => intval( $vehicle['year'] ),
+              'retailValue' => intval( $vehicle['retail_value'] ),
+              'trackingDevice' => $vehicle['tracking_device'],
+              'useCase' => $vehicle['use_case'],
+              'businessDescription' => $vehicle['business_description'],
+              'financed' => boolval( $vehicle['financed'] ),
+              'financeHouse' => $vehicle['finance_house'],
+              'accessories' => $accessories,
+              'created' => $vehicleCreated,
+              'updated' => $vehicleUpdated,
+              'deleted' => boolval( $vehicle['deleted'] ),
+            ];
           }
         }
 
         $q4->free();
-
-        $vehicles = array_values( $vehicles );
 
         $dt->setTimestamp( intval( $userData['created'] ) );
         $userCreated = $this->formatDateTimeRepresentation( $dt );
@@ -4490,7 +5283,7 @@ class Api {
         $this->printError( 403, 1090 );
       }
 
-      $userUuid = $this->app->db->escape( $data->accountId ?? "" );
+      $userUuid = $this->app->db->extendedEscape( $data->accountId ?? "" );
 
       $ratingTableDataset = [];
 
@@ -4505,49 +5298,49 @@ class Api {
         $usersTableDataset['user_uuid'] = $userUuid;
 
       if ( !empty( $data->username ) ) 
-        $usersTableDataset['username'] = $this->app->db->escape( $data->username );
+        $usersTableDataset['username'] = $this->app->db->extendedEscape( $data->username );
 
       $password = $data->password ?? "";
       $newPassword = $data->newPassword ?? "";
 
       if ( !empty( $data->firstName ) ) 
-        $usersTableDataset['first_name'] = $this->app->db->escape( $data->firstName );
+        $usersTableDataset['first_name'] = $this->app->db->extendedEscape( $data->firstName );
 
       if ( !empty( $data->lastName ) ) 
-        $usersTableDataset['last_name'] = $this->app->db->escape( $data->lastName );
+        $usersTableDataset['last_name'] = $this->app->db->extendedEscape( $data->lastName );
 
       if ( !empty( $data->birthDate ) ) 
         $usersTableDataset['birth_date'] = intval( $data->birthDate / 1000 );
 
       if ( !empty( $data->address ) ) 
-        $usersTableDataset['address'] = $this->app->db->escape( $data->address );
+        $usersTableDataset['address'] = $this->app->db->extendedEscape( $data->address );
 
       if ( !empty( $data->email ) ) 
-        $usersTableDataset['email'] = $this->app->db->escape( $data->email );
+        $usersTableDataset['email'] = $this->app->db->extendedEscape( $data->email );
 
       if ( !empty( $data->cellphone ) ) 
-        $usersTableDataset['cellphone'] = $this->app->db->escape( $data->cellphone );
+        $usersTableDataset['cellphone'] = $this->app->db->extendedEscape( $data->cellphone );
 
       if ( !empty( $data->phoneNumber ) ) 
-        $usersTableDataset['phone'] = $this->app->db->escape( $data->phoneNumber );
+        $usersTableDataset['phone'] = $this->app->db->extendedEscape( $data->phoneNumber );
 
       if ( !empty( $data->clientIdNumber ) ) 
         $usersTableDataset['client_id'] = intval( $data->clientIdNumber );
 
       if ( !empty( $data->maritalStatus ) ) 
-        $usersTableDataset['marital_status'] = $this->app->db->escape( $data->maritalStatus );
+        $usersTableDataset['marital_status'] = $this->app->db->extendedEscape( $data->maritalStatus );
 
       if ( !empty( $data->countryOfResidence ) ) 
-        $usersTableDataset['country_of_residence'] = $this->app->db->escape( $data->countryOfResidence );
+        $usersTableDataset['country_of_residence'] = $this->app->db->extendedEscape( $data->countryOfResidence );
 
       if ( !empty( $data->yearOfIssueDriverLicense ) ) 
         $usersTableDataset['year_of_issue_driver_license'] = intval( $data->yearOfIssueDriverLicense );
 
       if ( !empty( $data->claimsHistory ) ) 
-        $usersTableDataset['claims_history'] = $this->app->db->escape( $data->claimsHistory );
+        $usersTableDataset['claims_history'] = $this->app->db->extendedEscape( $data->claimsHistory );
 
       if ( !empty( $data->previousInsurer ) ) 
-        $usersTableDataset['previous_insurer'] = $this->app->db->escape( $data->previousInsurer );
+        $usersTableDataset['previous_insurer'] = $this->app->db->extendedEscape( $data->previousInsurer );
       
       $usersTableDataset['rating_id'] = 0; // !!! from table rating
       $usersTableDataset['role_id'] = 2; // 2 -> "user"
@@ -4571,6 +5364,8 @@ class Api {
 
         $usersTableDataset['user_uuid'] = Utils::generateUUID4();
         $usersTableDataset['client_id'] = intval( $data->clientIdNumber ?? random_int( 100000000000, 999999999999 ) );
+        $usersTableDataset['validation_code'] = random_int( 100000, 999999 );
+        $usersTableDataset['is_validated'] = 0;
         $usersTableDataset['created'] = $currentTime;
 
         if ( empty( $usersTableDataset['username'] ) || mb_strlen( $usersTableDataset['username'] ) < 5 ) {
@@ -4581,7 +5376,7 @@ class Api {
           $this->printError( 403, 1311 );
         }
 
-        $usersTableDataset['pswd_h'] = $this->app->db->escape( password_hash( $password, Settings::PASSWORD_HASH_ALGO ) );
+        $usersTableDataset['pswd_h'] = $this->app->db->extendedEscape( password_hash( $password, Settings::PASSWORD_HASH_ALGO ) );
 
         if ( empty( $usersTableDataset['email'] ) || !filter_var( $usersTableDataset['email'], FILTER_VALIDATE_EMAIL ) ) {
           $this->printError( 403, 1312 );
@@ -4680,7 +5475,7 @@ class Api {
           }
 
           if ( !empty( $newPassword ) ) {
-            $usersTableDataset['pswd_h'] = $this->app->db->escape( password_hash( $newPassword, Settings::PASSWORD_HASH_ALGO ) );
+            $usersTableDataset['pswd_h'] = $this->app->db->extendedEscape( password_hash( $newPassword, Settings::PASSWORD_HASH_ALGO ) );
           }
 
           unset( $usersTableDataset['user_id'], $usersTableDataset['user_uuid'], $usersTableDataset['username'], $usersTableDataset['email'], $usersTableDataset['client_id'], $usersTableDataset['rating_id'], $usersTableDataset['role_id'], $usersTableDataset['created'], $usersTableDataset['last_activity'], $usersTableDataset['banned'], $usersTableDataset['deleted'] );
@@ -4698,7 +5493,7 @@ class Api {
           }
 
           if ( !empty( $newPassword ) ) {
-            $usersTableDataset['pswd_h'] = $this->app->db->escape( password_hash( $newPassword, Settings::PASSWORD_HASH_ALGO ) );
+            $usersTableDataset['pswd_h'] = $this->app->db->extendedEscape( password_hash( $newPassword, Settings::PASSWORD_HASH_ALGO ) );
           }
 
           unset( $usersTableDataset['user_id'], $usersTableDataset['user_uuid'], $usersTableDataset['rating_id'], $usersTableDataset['role_id'], $usersTableDataset['created'], $usersTableDataset['last_activity'] );
@@ -4749,13 +5544,13 @@ class Api {
         /*
         if ( !empty( $data->avatar ) ) {
           if ( Utils::startsWith( $data->avatar, "/assets/{$userUuid}/" ) ) {
-            $usersTableDataset['avatar'] = $this->app->db->escape( $data->avatar );
+            $usersTableDataset['avatar'] = $this->app->db->extendedEscape( $data->avatar );
           }
         }
   
         if ( !empty( $data->driverLicensePhoto ) ) {
           if ( Utils::startsWith( $data->driverLicensePhoto, "/assets/{$userUuid}/" ) ) {
-            $usersTableDataset['driver_license_photo'] = $this->app->db->escape( $data->driverLicensePhoto );
+            $usersTableDataset['driver_license_photo'] = $this->app->db->extendedEscape( $data->driverLicensePhoto );
           }
         }
         */
@@ -4785,8 +5580,8 @@ class Api {
           'to_username' => $username,
           'entity_id' => '',
           'action' => 'update',
-          'fields' => $this->app->db->escape( $sqlSliceUser ),
-          'where_clause' => $this->app->db->escape( "user_uuid = \"{$userUuid}\"" ),
+          'fields' => $this->app->db->extendedEscape( $sqlSliceUser ),
+          'where_clause' => $this->app->db->extendedEscape( "user_uuid = \"{$userUuid}\"" ),
           'description' => 'updated account',
           'created' => $currentTime,
           'deleted' => 0 
@@ -4828,8 +5623,8 @@ class Api {
           expires = {$accessTokenExpiresTimestamp}
         " );
 
-        $country = $this->app->db->escape( $this->app->geo_country );
-        $userAgent = $this->app->db->escape( $this->app->user_agent );
+        $country = $this->app->db->extendedEscape( $this->app->geo_country );
+        $userAgent = $this->app->db->extendedEscape( $this->app->user_agent );
 
         $this->app->db->query( "INSERT INTO authentications SET 
           user_id = {$userId}, 
@@ -4908,7 +5703,7 @@ class Api {
   private function printResponse( array $data = [] ) : void {
     $this->printHeaders( 200 );
 
-    $myRole = $this->app->user['role_title'];
+    $myRole = $this->app->user['role_title'] ?? "";
 
     if ( $myRole === 'admin' ) {
       $executionTime = round( microtime(true) - $_SERVER['REQUEST_TIME_FLOAT'], 3 );

@@ -1,6 +1,6 @@
 <?php
 
-# mysqli driver v3.1 ( compatible with php8.0 ) - 2022-01-20
+# mysqli driver v3.2 ( compatible with php8.0 ) - 2022-04-21
 
 class Database extends \mysqli {
 
@@ -154,6 +154,28 @@ class Database extends \mysqli {
   }
 
   public function escape( $a ) : string {
+    return $this->real_escape_string( $a );
+  }
+
+  public function extendedEscape( string $a, bool $cleanNL = true, bool $strip_tags = true, bool $htmlspecialchars = true ) : string {
+    $a = trim( $a );
+
+    if ( $strip_tags ) {
+      $a = strip_tags( $a );
+    }
+
+    if ( $cleanNL ) {
+      $a = preg_replace( '/\s+/', ' ', $a );
+    }
+
+    if ( $htmlspecialchars ) {
+      $a = htmlspecialchars( 
+        string : $a, 
+        flags : ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 
+        double_encode : false
+      );
+    }
+
     return $this->real_escape_string( $a );
   }
   

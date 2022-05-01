@@ -711,7 +711,13 @@ class Api {
 
       $resourcesTableDataset['r_key'] = $resourceKey;
 
-      $resourcesTableDataset['r_value'] = $this->app->db->extendedEscape( $data->resourceValue ?? "" );
+      $resourcesTableDataset['r_value'] = 
+        $this->app->db->extendedEscape( 
+          $data->resourceValue ?? "",
+          cleanNL: false,
+          strip_tags: false,
+          htmlspecialchars: false
+        );
 
       if ( isset( $data->deleted ) )
         $resourcesTableDataset['deleted'] = intval( $data->deleted ) > 0 ? 1 : 0;
@@ -1201,9 +1207,13 @@ class Api {
             'retailValue' => intval( $vehicle['retail_value'] ),
             'trackingDevice' => $vehicle['tracking_device'],
             'useCase' => $vehicle['use_case'],
-            'businessDescription' => $vehicle['business_description'],
+            'businessDescription' => nl2br( $vehicle['business_description'] ),
             'financed' => boolval( $vehicle['financed'] ),
             'financeHouse' => $vehicle['finance_house'],
+            'isTrackingDeviceRequired' => boolval( $vehicle['is_tracking_device_required'] ),
+            'insuranceTypeRecommended' => $vehicle['insurance_type_recommended'],
+            'vehicleClass' => $vehicle['vehicle_class'],
+            'notes' => nl2br( $vehicle['notes'] ),
             'accessories' => $accessories,
             'created' => $vehicleCreated,
             'updated' => $vehicleUpdated,
@@ -1228,9 +1238,13 @@ class Api {
               'retailValue' => intval( $vehicle['retail_value'] ),
               'trackingDevice' => $vehicle['tracking_device'],
               'useCase' => $vehicle['use_case'],
-              'businessDescription' => $vehicle['business_description'],
+              'businessDescription' => nl2br( $vehicle['business_description'] ),
               'financed' => boolval( $vehicle['financed'] ),
               'financeHouse' => $vehicle['finance_house'],
+              'isTrackingDeviceRequired' => boolval( $vehicle['is_tracking_device_required'] ),
+              'insuranceTypeRecommended' => $vehicle['insurance_type_recommended'],
+              'vehicleClass' => $vehicle['vehicle_class'],
+              'notes' => nl2br( $vehicle['notes'] ),
               'accessories' => $accessories,
               'created' => $vehicleCreated,
               'updated' => $vehicleUpdated,
@@ -1323,6 +1337,18 @@ class Api {
 
       if ( !empty( $data->financeHouse ) )
         $vehiclesTableDataset['finance_house'] = $this->app->db->extendedEscape( $data->financeHouse );
+
+      if ( isset( $data->isTrackingDeviceRequired ) )
+        $vehiclesTableDataset['is_tracking_device_required'] = intval( $data->isTrackingDeviceRequired ) > 0 ? 1 : 0;
+
+      if ( !empty( $data->insuranceTypeRecommended ) )
+        $vehiclesTableDataset['insurance_type_recommended'] = $this->app->db->extendedEscape( $data->insuranceTypeRecommended );
+
+      if ( !empty( $data->vehicleClass ) )
+        $vehiclesTableDataset['vehicle_class'] = $this->app->db->extendedEscape( $data->vehicleClass );
+
+      if ( !empty( $data->notes ) )
+        $vehiclesTableDataset['notes'] = $this->app->db->extendedEscape( $data->notes, cleanNL: false );
 
       $mode = '';
 
@@ -1487,9 +1513,13 @@ class Api {
         'retailValue' => intval( $vehicle['retail_value'] ),
         'trackingDevice' => $vehicle['tracking_device'],
         'useCase' => $vehicle['use_case'],
-        'businessDescription' => $vehicle['business_description'],
+        'businessDescription' => nl2br( $vehicle['business_description'] ),
         'financed' => boolval( $vehicle['financed'] ),
         'financeHouse' => $vehicle['finance_house'],
+        'isTrackingDeviceRequired' => boolval( $vehicle['is_tracking_device_required'] ),
+        'insuranceTypeRecommended' => $vehicle['insurance_type_recommended'],
+        'vehicleClass' => $vehicle['vehicle_class'],
+        'notes' => nl2br( $vehicle['notes'] ),
         'created' => $vehicleCreated,
         'updated' => $vehicleUpdated,
         'deleted' => boolval( $vehicle['deleted'] ),
@@ -1560,8 +1590,9 @@ class Api {
       }
       else {
         $offset = intval( $this->app->get['offset'] ?? 0 );
-        $limit = intval( $this->app->get['limit'] ?? Settings::PAGINATION_MAX_LIMIT );
-        $limit = $limit <= Settings::PAGINATION_MAX_LIMIT ? $limit : Settings::PAGINATION_MAX_LIMIT;
+        //$limit = intval( $this->app->get['limit'] ?? Settings::PAGINATION_MAX_LIMIT );
+        //$limit = $limit <= Settings::PAGINATION_MAX_LIMIT ? $limit : Settings::PAGINATION_MAX_LIMIT;
+        $limit = 1000000;
 
         $q1 = $this->app->db->query( "SELECT * FROM vehicles_data{$sqlWhereConditionHideDeleted} ORDER BY vd_id ASC LIMIT {$offset}, {$limit}" );
 
@@ -1588,6 +1619,7 @@ class Api {
           'type' => $vehiclesDataRow['type'],
           'year' => intval( $vehiclesDataRow['year'] ),
           'trackingDeviceIsRequired' => boolval( $vehiclesDataRow['tracking_device_is_required'] ),
+          'vehicleInsuranceType' => $vehiclesDataRow['vehicle_insurance_type'],
           'deleted' => boolval( $vehiclesDataRow['deleted'] ),
         ];
       }
@@ -1623,7 +1655,7 @@ class Api {
       if ( !empty( $data->model ) )
         $vdTableDataset['model'] = $this->app->db->extendedEscape( $data->model ?? "" );
 
-      if ( intval( $data->year ) )
+      if ( !empty( $data->year ) )
         $vdTableDataset['year'] = intval( $data->year ?? 0 );
 
       if ( !empty( $data->trim ) )
@@ -1634,6 +1666,9 @@ class Api {
 
       if ( isset( $data->trackingDeviceIsRequired ) )
         $vdTableDataset['tracking_device_is_required'] = intval( $data->trackingDeviceIsRequired ) > 0 ? 1 : 0;
+
+      if ( !empty( $data->vehicleInsuranceType ) )
+        $vdTableDataset['vehicle_insurance_type'] = $this->app->db->extendedEscape( $data->vehicleInsuranceType ?? "" );
 
       if ( isset( $data->deleted ) )
           $vdTableDataset['deleted'] = intval( $data->deleted ) > 0 ? 1 : 0;
@@ -1729,6 +1764,7 @@ class Api {
         'type' => $vehiclesDataRow['type'],
         'year' => intval( $vehiclesDataRow['year'] ),
         'trackingDeviceIsRequired' => boolval( $vehiclesDataRow['tracking_device_is_required'] ),
+        'vehicleInsuranceType' => $vehiclesDataRow['vehicle_insurance_type'],
         'deleted' => boolval( $vehiclesDataRow['deleted'] ),
       ]);
     }
@@ -3020,6 +3056,7 @@ class Api {
 
       $estimationUuid = $this->app->db->extendedEscape( $this->app->get['estimationId'] ?? "" );
       $userUuid = $myRole === 'admin' ? $this->app->db->extendedEscape( $this->app->get['accountId'] ?? "" ) : $this->app->user['user_uuid'];
+      $referenceNumber = intval( $this->app->get['referenceNumber'] ?? 0 );
       $showDeleted = $myRole === 'admin' ? boolval( $this->app->get['showDeleted'] ?? false ) : false;
 
       $sqlWhereAndConditionHideDeleted = !$showDeleted ? " AND deleted = 0" : "";
@@ -3031,6 +3068,29 @@ class Api {
         $q1 = $this->app->db->query( "SELECT * FROM estimations 
         WHERE estimation_uuid = \"{$estimationUuid}\" AND is_used = 0{$sqlWhereAndConditionHideDeleted}" );
         $estimationsCount = 1;
+      }
+      else if ( $referenceNumber > 0 ) {
+        if ( $myRole === 'admin' ) {
+          $q1 = $this->app->db->query( "SELECT * FROM estimations 
+          WHERE reference_number = {$referenceNumber} AND is_used = 0{$sqlWhereAndConditionHideDeleted}" );
+          $estimationsCount = 1;
+        }
+        else {
+          $q0 = $this->app->db->query( "SELECT user_id FROM users WHERE user_uuid = \"{$userUuid}\"{$sqlWhereAndConditionHideDeleted}" );
+
+          if ( !$q0->num_rows ) {
+            $this->printError( 404, 1910 );
+          }
+    
+          $userId = intval( $q0->fetch_assoc()['user_id'] );
+          $q0->free();
+
+          $q1 = $this->app->db->query( "SELECT * FROM estimations WHERE 
+          reference_number = {$referenceNumber} 
+          AND user_id = {$userId} 
+          AND is_used = 0{$sqlWhereAndConditionHideDeleted}" );
+          $estimationsCount = 1;
+        }
       }
       else if ( mb_strlen( $userUuid ) > 0 ) {
         $offset = intval( $this->app->get['offset'] ?? 0 );
@@ -3247,6 +3307,7 @@ class Api {
         if ( $estimation['type'] === "estimation" ) {
           $estimations[] = [
             'estimationId' => $estimation['estimation_uuid'],
+            'referenceNumber' => intval( $estimation['reference_number'] ),
             'estimationType' => $estimation['type'],
             'accountId' => $user['user_uuid'],
             'username' => $user['username'],
@@ -3277,6 +3338,7 @@ class Api {
         else if ( $estimation['type'] === "accessory" ) {
           $estimations[] = [
             'estimationId' => $estimation['estimation_uuid'],
+            'referenceNumber' => intval( $estimation['reference_number'] ),
             'estimationType' => $estimation['type'],
             'accountId' => $user['user_uuid'],
             'username' => $user['username'],
@@ -3372,6 +3434,8 @@ class Api {
 
       $totalCost = 0.0;
       $product = "";
+
+      $referenceNumber = random_int( 1000000, 9999999 );
 
       if ( $estimationType === "estimation" ) {
         if ( !is_array( $subProductsUuids ) ) $subProductsUuids = [];
@@ -3510,12 +3574,24 @@ class Api {
           cleanNL: false
         );
 
-        $totalCost = round( $accessoriesCost * 0.03 / 12, 2 );
+        $q11 = $this->app->db->query( "SELECT * FROM resources WHERE r_key = \"rating_accessory\"" );
+
+        if ( $q11->num_rows ) {
+          $rate = floatval( $q11->fetch_assoc()['r_value'] );
+          $q11->free();
+        }
+        else {
+          // default value
+          $rate = 0.03;
+        }
+
+        $totalCost = round( $accessoriesCost * $rate / 12, 2 );
       }
 
       $estimationTableDataset = [];
 
       $estimationTableDataset['estimation_uuid'] = Utils::generateUUID4();
+      $estimationTableDataset['reference_number'] = $referenceNumber;
       $estimationTableDataset['type'] = $estimationType;
       $estimationTableDataset['products'] = $product;
       $estimationTableDataset['user_id'] = $userId;
@@ -3571,6 +3647,7 @@ class Api {
       if ( $estimationTableDataset['type'] === "estimation" ) {
         $this->printResponse([
           'estimationId' => $estimationTableDataset['estimation_uuid'],
+          'referenceNumber' => intval( $estimationTableDataset['reference_number'] ),
           'estimationType' => $estimationTableDataset['type'],
           'accountId' => $userUuid,
           'vehicleId' => $vehicleUuid,
@@ -3587,6 +3664,7 @@ class Api {
       else if ( $estimationTableDataset['type'] === "accessory" ) {
         $this->printResponse([
           'estimationId' => $estimationTableDataset['estimation_uuid'],
+          'referenceNumber' => intval( $estimationTableDataset['reference_number'] ),
           'estimationType' => $estimationTableDataset['type'],
           'accountId' => $userUuid,
           'vehicleId' => $vehicleUuid,
@@ -3615,6 +3693,7 @@ class Api {
     if ( $this->app->requestMethod === 'GET' ) {
       $orderUuid = $this->app->db->extendedEscape( $this->app->get['orderId'] ?? "" );
       $userUuid = $myRole === 'admin' ? $this->app->db->extendedEscape( $this->app->get['accountId'] ?? "" ) : $this->app->user['user_uuid'];
+      $referenceNumber = intval( $this->app->get['referenceNumber'] ?? 0 );
       $orderStatus = $this->app->db->extendedEscape( $this->app->get['orderStatus'] ?? "" );
       $showDeleted = $myRole === 'admin' ? boolval( $this->app->get['showDeleted'] ?? false ) : false;
 
@@ -3627,6 +3706,34 @@ class Api {
       if ( mb_strlen( $orderUuid ) > 0 ) {
         $q1 = $this->app->db->query( "SELECT * FROM orders WHERE order_uuid = \"{$orderUuid}\"{$sqlWhereAndConditionHideDeleted}" );
         $ordersCount = 1;
+      }
+      else if ( $referenceNumber > 0 ) {
+        if ( $myRole === 'admin' ) {
+          $q1 = $this->app->db->query( "SELECT * FROM orders 
+          WHERE reference_number = {$referenceNumber}{$sqlWhereAndConditionHideDeleted}" );
+          $ordersCount = 1;
+        }
+        else {
+          $q0 = $this->app->db->query( "SELECT user_id FROM users WHERE user_uuid = \"{$userUuid}\"{$sqlWhereAndConditionHideDeleted}" );
+
+          if ( !$q0->num_rows ) {
+            $this->printError( 404, 2010 );
+          }
+    
+          $userId = intval( $q0->fetch_assoc()['user_id'] );
+          $q0->free();
+
+          $q1 = $this->app->db->query( "SELECT
+            o.*
+            FROM orders o
+            INNER JOIN estimations e
+            INNER JOIN orders_estimations oe
+            ON o.order_id = oe.order_id AND e.estimation_id = oe.estimation_id
+            WHERE e.user_id = {$userId} AND o.reference_number = {$referenceNumber}{$sqlJoinWhereAndConditionHideDeleted}
+            " );
+
+          $ordersCount = 1;
+        }
       }
       else if ( mb_strlen( $userUuid ) > 0 ) {
         $offset = intval( $this->app->get['offset'] ?? 0 );
@@ -3933,6 +4040,7 @@ class Api {
           if ( $estimation['type'] === "estimation" ) {
             $estimations[] = [
               'estimationId' => $estimation['estimation_uuid'],
+              'referenceNumber' => intval( $estimation['reference_number'] ),
               'estimationType' => $estimation['type'],
               'accountId' => $user['user_uuid'],
               'username' => $user['username'],
@@ -3958,6 +4066,7 @@ class Api {
           else if ( $estimation['type'] === "accessory" ) {
             $estimations[] = [
               'estimationId' => $estimation['estimation_uuid'],
+              'referenceNumber' => intval( $estimation['reference_number'] ),
               'estimationType' => $estimation['type'],
               'accountId' => $user['user_uuid'],
               'username' => $user['username'],
@@ -4021,6 +4130,7 @@ class Api {
 
         $orders[] = [
           'orderId' => $order['order_uuid'],
+          'referenceNumber' => intval( $order['reference_number'] ),
           'orderStatus' => $order['order_status'],
           'allEstimationsTotalCost' => round( $allEstimationsTotalCost, 2 ),
           'adjustedCost' => $adjustedCost,
@@ -4068,6 +4178,8 @@ class Api {
       else $this->printError( 404, 2011 );
 
       if ( $mode === 'create' ) {
+        $referenceNumber = random_int( 1000000, 9999999 );
+
         $q6 = $this->app->db->query( "SELECT user_id FROM users WHERE user_uuid = \"{$userUuid}\" AND deleted = 0" );
 
         if ( !$q6->num_rows ) {
@@ -4118,6 +4230,7 @@ class Api {
         $ordersTableDataset = [];
 
         $ordersTableDataset['order_uuid'] = Utils::generateUUID4();
+        $ordersTableDataset['reference_number'] = $referenceNumber;
         $ordersTableDataset['adjusted_cost'] = 0.00;
         $ordersTableDataset['order_status'] = 'pending';
         $ordersTableDataset['created'] = $currentTime;
@@ -4296,6 +4409,7 @@ class Api {
 
       $this->printResponse([
         'orderId' => $order['order_uuid'],
+        'referenceNumber' => intval( $order['reference_number'] ),
         'estimationIds' => $estimationUuids,
         'adjustedCost' => floatval( $order['adjusted_cost'] ),
         'orderStatus' => $order['order_status'],
@@ -4469,7 +4583,7 @@ class Api {
 
         // meta
         $fileType = $this->app->db->extendedEscape( $data->fileType ?? "" );
-        $description = $this->app->db->extendedEscape( $data->description ?? "" );
+        $description = $this->app->db->extendedEscape( $data->description ?? "", cleanNL: false );
         $relatedTo = $this->app->db->extendedEscape( $data->relatedTo ?? "" );
         $relationId = $this->app->db->extendedEscape( $data->relationId ?? "" );
 
@@ -5147,9 +5261,13 @@ class Api {
               'retailValue' => intval( $vehicle['retail_value'] ),
               'trackingDevice' => $vehicle['tracking_device'],
               'useCase' => $vehicle['use_case'],
-              'businessDescription' => $vehicle['business_description'],
+              'businessDescription' => nl2br( $vehicle['business_description'] ),
               'financed' => boolval( $vehicle['financed'] ),
               'financeHouse' => $vehicle['finance_house'],
+              'isTrackingDeviceRequired' => boolval( $vehicle['is_tracking_device_required'] ),
+              'insuranceTypeRecommended' => $vehicle['insurance_type_recommended'],
+              'vehicleClass' => $vehicle['vehicle_class'],
+              'notes' => nl2br( $vehicle['notes'] ),
               'accessories' => $accessories,
               'created' => $vehicleCreated,
               'updated' => $vehicleUpdated,
@@ -5169,9 +5287,13 @@ class Api {
               'retailValue' => intval( $vehicle['retail_value'] ),
               'trackingDevice' => $vehicle['tracking_device'],
               'useCase' => $vehicle['use_case'],
-              'businessDescription' => $vehicle['business_description'],
+              'businessDescription' => nl2br( $vehicle['business_description'] ),
               'financed' => boolval( $vehicle['financed'] ),
               'financeHouse' => $vehicle['finance_house'],
+              'isTrackingDeviceRequired' => boolval( $vehicle['is_tracking_device_required'] ),
+              'insuranceTypeRecommended' => $vehicle['insurance_type_recommended'],
+              'vehicleClass' => $vehicle['vehicle_class'],
+              'notes' => nl2br( $vehicle['notes'] ),
               'accessories' => $accessories,
               'created' => $vehicleCreated,
               'updated' => $vehicleUpdated,

@@ -4128,12 +4128,17 @@ class Api {
         $dt->setTimestamp( intval( $order['updated'] ) );
         $orderUpdated = $this->formatDateTimeRepresentation( $dt );
 
+        $inceptionDateOfCover = \DateTime::createFromFormat( 'U', $order['inception_date_of_cover'] );
+        $inceptionDateOfCoverFormatted = $this->formatDateTimeRepresentation( $inceptionDateOfCover );
+
         $orders[] = [
           'orderId' => $order['order_uuid'],
           'referenceNumber' => intval( $order['reference_number'] ),
           'orderStatus' => $order['order_status'],
           'allEstimationsTotalCost' => round( $allEstimationsTotalCost, 2 ),
           'adjustedCost' => $adjustedCost,
+          'inceptionDateOfCover' => $inceptionDateOfCoverFormatted,
+          'paidBy' => $order['paid_by'],
           'assets' => $assets,
           'estimations' => $estimations,
           'orderCreated' => $orderCreated,
@@ -4233,6 +4238,8 @@ class Api {
         $ordersTableDataset['reference_number'] = $referenceNumber;
         $ordersTableDataset['adjusted_cost'] = 0.00;
         $ordersTableDataset['order_status'] = 'pending';
+        $ordersTableDataset['inception_date_of_cover'] = $currentTime;
+        $ordersTableDataset['paid_by'] = $this->app->db->extendedEscape( $data->paidBy ?? "" );
         $ordersTableDataset['created'] = $currentTime;
         $ordersTableDataset['deleted'] = 0;
 
@@ -4295,6 +4302,12 @@ class Api {
         if ( $adjustedCost >= 0 && $myRole === 'admin' ) {
           $ordersTableDataset['adjusted_cost'] = $adjustedCost;
         }
+
+        if ( !empty( $data->inceptionDateOfCover ) ) 
+          $ordersTableDataset['inception_date_of_cover'] = intval( $data->inceptionDateOfCover / 1000 );
+
+        if ( !empty( $data->paidBy ) ) 
+          $ordersTableDataset['paid_by'] = $this->app->db->extendedEscape( $data->paidBy ?? "" );
 
         $ordersTableDataset['updated'] = $currentTime;
 
@@ -4407,11 +4420,16 @@ class Api {
       $dt->setTimestamp( intval( $order['updated'] ) );
       $orderUpdated = $this->formatDateTimeRepresentation( $dt );
 
+      $inceptionDateOfCover = \DateTime::createFromFormat( 'U', $order['inception_date_of_cover'] );
+      $inceptionDateOfCoverFormatted = $this->formatDateTimeRepresentation( $inceptionDateOfCover );
+
       $this->printResponse([
         'orderId' => $order['order_uuid'],
         'referenceNumber' => intval( $order['reference_number'] ),
         'estimationIds' => $estimationUuids,
         'adjustedCost' => floatval( $order['adjusted_cost'] ),
+        'inceptionDateOfCover' => $inceptionDateOfCoverFormatted,
+        'paidBy' => $order['paid_by'],
         'orderStatus' => $order['order_status'],
         'created' => $orderCreated,
         'updated' => $orderUpdated,

@@ -22,19 +22,12 @@ class Settings {
   public const DEFAULT_IV = '';
 
   public const ACCESS_TOKEN_HASH_SECRET = '';
-  
-  public const IP4_INTERFACES = [
-
-  ];
-  public const IP4_PROXIES = [
-    
-  ];
 
   public const DBNAME = '';
 
-  public const AUTH_ATTEMPTS = 1000;
+  public const AUTH_ATTEMPTS = 5;
   public const AUTH_ATTEMPTS_INTERVAL = "PT30M";
-  public const VALIDATION_ATTEMPTS = 1000;
+  public const VALIDATION_ATTEMPTS = 5;
   public const VALIDATION_ATTEMPTS_INTERVAL = "PT30M";
   public const TOKEN_EXPIRATION_INTERVAL = "PT6H";
 
@@ -60,4 +53,7 @@ class Settings {
     'SMTPSecure' => 'tls',
     'Port'     => 587,
   ];
+
+  public const YOCO_SECRET_KEY = '';
+  public const YOCO_PUBLIC_KEY = '';
 }

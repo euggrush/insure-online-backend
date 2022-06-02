@@ -8,8 +8,9 @@ use PHPMailer\PHPMailer\Exception;
 
 require 'vendor/autoload.php';
 
-class Api {
+final class Api {
   private App $app;
+  private array $httpStatuses;
 
   public function __construct( App &$app, array $options = [] ) {
     $this->app = &$app;
@@ -17,6 +18,8 @@ class Api {
     if ( empty( $this->app->query ) ) {
       Template::error( '$this->app->query is empty', 1 );
     }
+
+    $this->httpStatuses = require 'http-status-codes.php';
 
     switch( $this->app->query ) {
       case Endpoints::API_AUTHORIZATION:
@@ -77,6 +80,10 @@ class Api {
 
       case Endpoints::API_ASSETS:
         $this->assets();
+      break;
+
+      case Endpoints::API_PAYMENT:
+        $this->payment();
       break;
 
       default:
@@ -207,7 +214,7 @@ class Api {
     return [ $accessToken, $accessTokenCreatedTimestamp, $accessTokenExpiresTimestamp, $accessTokenExpires ];
   }
 
-  public function authorization() : void {
+  private function authorization() : void {
     if ( $this->app->requestMethod !== 'POST' )
       $this->printError( 405, 106 );
 
@@ -366,7 +373,7 @@ class Api {
     ]);
   }
 
-  public function authStats() : void {
+  private function authStats() : void {
     $this->checkAccessLevel( anonymousIsAllowed: false );
 
     $myRole = $this->app->user['role_title'];
@@ -486,7 +493,7 @@ class Api {
     }
   }
 
-  public function actionsLogs() : void {
+  private function actionsLogs() : void {
     $this->checkAccessLevel( anonymousIsAllowed: false );
 
     $myRole = $this->app->user['role_title'];
@@ -629,7 +636,7 @@ class Api {
     }
   }
 
-  public function resources() : void {
+  private function resources() : void {
     $this->checkAccessLevel( anonymousIsAllowed: true );
 
     $myRole = $this->app->user['role_title'];
@@ -807,7 +814,7 @@ class Api {
     }
   }
 
-  public function categories() : void {
+  private function categories() : void {
     $this->checkAccessLevel( anonymousIsAllowed: true );
 
     $myRole = $this->app->user['role_title'];
@@ -1031,7 +1038,7 @@ class Api {
     }
   }
 
-  public function vehicles() : void {
+  private function vehicles() : void {
     $this->checkAccessLevel( anonymousIsAllowed: false );
 
     $myRole = $this->app->user['role_title'];
@@ -1198,6 +1205,10 @@ class Api {
             'firstName' => $user['first_name'],
             'lastName' => $user['last_name'],
             'details' => $vehicle['details'],
+            'make' => $vehicle['make'],
+            'model' => $vehicle['model'],
+            'trim' => $vehicle['trim'],
+            'type' => $vehicle['type'],
             'assets' => $assets,
             'regNumber' => $vehicle['reg_number'],
             'vin' => $vehicle['vin'],
@@ -1229,6 +1240,10 @@ class Api {
               'firstName' => $user['first_name'],
               'lastName' => $user['last_name'],
               'details' => $vehicle['details'],
+              'make' => $vehicle['make'],
+              'model' => $vehicle['model'],
+              'trim' => $vehicle['trim'],
+              'type' => $vehicle['type'],
               'assets' => $assets,
               'regNumber' => $vehicle['reg_number'],
               'vin' => $vehicle['vin'],
@@ -1295,6 +1310,18 @@ class Api {
 
       if ( !empty( $data->details ) )
         $vehiclesTableDataset['details'] = $this->app->db->extendedEscape( $data->details );
+
+      if ( !empty( $data->make ) )
+      $vehiclesTableDataset['make'] = $this->app->db->extendedEscape( $data->make );
+
+      if ( !empty( $data->model ) )
+      $vehiclesTableDataset['model'] = $this->app->db->extendedEscape( $data->model );
+
+      if ( !empty( $data->trim ) )
+      $vehiclesTableDataset['trim'] = $this->app->db->extendedEscape( $data->trim );
+
+      if ( !empty( $data->type ) )
+      $vehiclesTableDataset['type'] = $this->app->db->extendedEscape( $data->type );
 
       if ( !empty( $data->regNumber ) )
         $vehiclesTableDataset['reg_number'] = $this->app->db->extendedEscape( $data->regNumber );
@@ -1505,6 +1532,10 @@ class Api {
         'firstName' => $user['first_name'],
         'lastName' => $user['last_name'],
         'details' => $vehicle['details'],
+        'make' => $vehicle['make'],
+        'model' => $vehicle['model'],
+        'trim' => $vehicle['trim'],
+        'type' => $vehicle['type'],
         'regNumber' => $vehicle['reg_number'],
         'vin' => $vehicle['vin'],
         'engine' => $vehicle['engine'],
@@ -1530,7 +1561,7 @@ class Api {
     }
   }
 
-  public function vehiclesData() : void {
+  private function vehiclesData() : void {
     $this->checkAccessLevel( anonymousIsAllowed: true );
 
     $myRole = $this->app->user['role_title'];
@@ -1773,7 +1804,7 @@ class Api {
     }
   }
 
-  public function mainProducts() : void {
+  private function mainProducts() : void {
     $this->checkAccessLevel( anonymousIsAllowed: true );
 
     $myRole = $this->app->user['role_title'];
@@ -2138,7 +2169,7 @@ class Api {
     }
   }
 
-  public function subProducts() : void {
+  private function subProducts() : void {
     $this->checkAccessLevel( anonymousIsAllowed: true );
 
     $myRole = $this->app->user['role_title'];
@@ -2527,7 +2558,7 @@ class Api {
     }
   }
 
-  public function rating() : void {
+  private function rating() : void {
     $this->checkAccessLevel( anonymousIsAllowed: false );
 
     $myRole = $this->app->user['role_title'];
@@ -2757,7 +2788,7 @@ class Api {
     }
   }
 
-  public function accessories() : void {
+  private function accessories() : void {
     $this->checkAccessLevel( anonymousIsAllowed: true );
 
     $myRole = $this->app->user['role_title'];
@@ -3040,7 +3071,7 @@ class Api {
     }
   }
 
-  public function estimations() : void {
+  private function estimations() : void {
     $this->checkAccessLevel( anonymousIsAllowed: false );
 
     $myRole = $this->app->user['role_title'];
@@ -3192,11 +3223,15 @@ class Api {
         $vehicleDetails = $estimation['vehicle_details'];
         $vehicleRetailValue = intval( $estimation['vehicle_retail_value'] );
         $totalCost = floatval( $estimation['total_cost'] );
+        $totalCostCalculated = floatval( $estimation['total_cost_calculated'] );
         $isUsed = boolval( $estimation['is_used'] );
         $deleted = boolval( $estimation['deleted'] );
 
         $dt->setTimestamp( intval( $estimation['created'] ) );
         $estimationCreated = $this->formatDateTimeRepresentation( $dt );
+
+        $dt->setTimestamp( intval( $estimation['start_from'] ) );
+        $startFromFormatted = $this->formatDateTimeRepresentation( $dt );
 
         $subProducts = [];
         $accessories = [];
@@ -3331,6 +3366,8 @@ class Api {
             'mainProductIsDeleted' => $mainProductIsDeleted,
             'subProducts' => $subProducts,
             'totalCost' => $totalCost,
+            'startFromFormatted' => $startFromFormatted,
+            'totalCostCalculated' => $totalCostCalculated,
             'created' => $estimationCreated,
             'deleted' => $deleted,
           ];
@@ -3356,6 +3393,8 @@ class Api {
             'vehicleIsDeleted' => $vehicleIsDeleted,
             'accessories' => $accessories,
             'totalCost' => $totalCost,
+            'startFromFormatted' => $startFromFormatted,
+            'totalCostCalculated' => $totalCostCalculated,
             'created' => $estimationCreated,
             'deleted' => $deleted,
           ];
@@ -3384,11 +3423,18 @@ class Api {
       $mainProductUuid = $this->app->db->extendedEscape( $data->mainProductId ?? "" );
       $subProductsUuids = $data->subProductsIds ?? [];
       $accessoriesUuids = $data->accessoriesIds ?? [];
+      $startFrom = intval( intval( $data->startFrom ?? 0 ) / 1000 );
       $vehicleUuid = $this->app->db->extendedEscape( $data->vehicleId ?? "" );
 
       if ( !in_array( needle: $estimationType, haystack: [ "estimation", "accessory" ], strict: true ) ) {
         $this->printError( 403, 1918 );
       }
+
+      /*
+      if ( $startFrom < $currentTime ) {
+        $this->printError( 403, 1920 );
+      }
+      */
 
       $q3 = $this->app->db->query( "SELECT * FROM users WHERE user_uuid = \"{$userUuid}\" AND deleted = 0" );
     
@@ -3588,6 +3634,25 @@ class Api {
         $totalCost = round( $accessoriesCost * $rate / 12, 2 );
       }
 
+      $totalCostPerDay = round( $totalCost / 30, 2 );
+
+      $startInsuranceDate = new \DateTime( "now", new \DateTimeZone("UTC") );
+      $startInsuranceDate->setTimestamp( $startFrom );
+
+      $startFromFormatted = $this->formatDateTimeRepresentation( $startInsuranceDate );
+
+      $daysInCurrentMonth = intval( $startInsuranceDate->format( 't' ) );
+      $currentDay = intval( $startInsuranceDate->format( 'j' ) );
+
+      $startInsuranceDate->add( new \DateInterval('P1M') );
+      $daysInNextMonth = intval( $startInsuranceDate->format( 't' ) );
+
+      $insuranceDays = $currentDay > 1 
+      ? ( $daysInCurrentMonth - ( $currentDay - 1 ) ) + $daysInNextMonth
+      : $daysInCurrentMonth - ( $currentDay - 1 );
+
+      $totalCostCalculated = round( $insuranceDays * $totalCostPerDay, 2 );
+
       $estimationTableDataset = [];
 
       $estimationTableDataset['estimation_uuid'] = Utils::generateUUID4();
@@ -3599,6 +3664,8 @@ class Api {
       $estimationTableDataset['vehicle_id'] = $vehicleId;
       $estimationTableDataset['vehicle_details'] = $this->app->db->extendedEscape( $vehicle['details'] );
       $estimationTableDataset['vehicle_retail_value'] = $vehicleRetailValue;
+      $estimationTableDataset['start_from'] = $startFrom;
+      $estimationTableDataset['total_cost_calculated'] = $totalCostCalculated;
       $estimationTableDataset['total_cost'] = $totalCost;
       $estimationTableDataset['is_used'] = 0;
       $estimationTableDataset['created'] = $currentTime;
@@ -3657,6 +3724,8 @@ class Api {
           'mainProductName' => $mainProduct['product_name'],
           'mainProductCost' => $mainProductCost,
           'subProducts' => $subProducts,
+          'startFromFormatted' => $startFromFormatted,
+          'totalCostCalculated' => $totalCostCalculated,
           'totalCost' => $totalCost,
           'created' => $estimationCreated,
         ]);
@@ -3671,6 +3740,8 @@ class Api {
           'vehicleDetails' => $vehicle['details'],
           'vehicleRetailValue' => $vehicleRetailValue,
           'accessories' => $accessories ?? [],
+          'startFromFormatted' => $startFromFormatted,
+          'totalCostCalculated' => $totalCostCalculated,
           'totalCost' => $totalCost,
           'created' => $estimationCreated,
         ]);
@@ -3681,7 +3752,7 @@ class Api {
     }
   }
 
-  public function orders() : void {
+  private function orders() : void {
     $this->checkAccessLevel( anonymousIsAllowed: false );
 
     $myRole = $this->app->user['role_title'];
@@ -3873,6 +3944,7 @@ class Api {
         $estimations = [];
 
         $allEstimationsTotalCost = 0.0;
+        $allEstimationsTotalCostCalculated = 0.0;
 
         $orderId = intval( $order['order_id'] );
 
@@ -3897,10 +3969,14 @@ class Api {
           $vehicleDetails = $estimation['vehicle_details'];
           $vehicleRetailValue = intval( $estimation['vehicle_retail_value'] );
           $totalCost = floatval( $estimation['total_cost'] );
+          $totalCostCalculated = floatval( $estimation['total_cost_calculated'] );
           $estimationIsDeleted = boolval( $estimation['deleted'] );
 
           $dt->setTimestamp( intval( $estimation['created'] ) );
           $estimationCreated = $this->formatDateTimeRepresentation( $dt );
+
+          $dt->setTimestamp( intval( $estimation['start_from'] ) );
+          $startFromFormatted = $this->formatDateTimeRepresentation( $dt );
 
           $subProducts = [];
           $accessories = [];
@@ -4036,6 +4112,7 @@ class Api {
           $vehicleIsDeleted = boolval( $vehicle['deleted'] );
 
           $allEstimationsTotalCost += $totalCost;
+          $allEstimationsTotalCostCalculated += $totalCostCalculated;
 
           if ( $estimation['type'] === "estimation" ) {
             $estimations[] = [
@@ -4059,6 +4136,8 @@ class Api {
               'mainProductIsDeleted' => $mainProductIsDeleted,
               'subProducts' => $subProducts,
               'totalCost' => $totalCost,
+              'startFromFormatted' => $startFromFormatted,
+              'totalCostCalculated' => $totalCostCalculated,
               'estimationCreated' => $estimationCreated,
               'estimationIsDeleted' => $estimationIsDeleted,
             ];
@@ -4079,6 +4158,8 @@ class Api {
               'vehicleAssets' => $vehicleAssets,
               'accessories' => $accessories,
               'totalCost' => $totalCost,
+              'startFromFormatted' => $startFromFormatted,
+              'totalCostCalculated' => $totalCostCalculated,
               'estimationCreated' => $estimationCreated,
               'estimationIsDeleted' => $estimationIsDeleted,
             ];
@@ -4136,6 +4217,7 @@ class Api {
           'referenceNumber' => intval( $order['reference_number'] ),
           'orderStatus' => $order['order_status'],
           'allEstimationsTotalCost' => round( $allEstimationsTotalCost, 2 ),
+          'allEstimationsTotalCostCalculated' => round( $allEstimationsTotalCostCalculated, 2 ),
           'adjustedCost' => $adjustedCost,
           'inceptionDateOfCover' => $inceptionDateOfCoverFormatted,
           'paidBy' => $order['paid_by'],
@@ -4261,6 +4343,14 @@ class Api {
           $this->printError( 500, 1015 );
         }
 
+        foreach( $estimationIds as $estimationId ) {
+          $this->app->db->query( "INSERT INTO orders_estimations
+            SET order_id = {$orderId}, estimation_id = {$estimationId}" );
+
+          $this->app->db->query( "UPDATE estimations
+            SET is_used = 1 WHERE estimation_id = {$estimationId}" );
+        }
+
         $actionsTableDataset = [
           'user_uuid' => $this->app->user['user_uuid'],
           'username' => $this->app->user['username'],
@@ -4277,14 +4367,6 @@ class Api {
         ];
   
         $this->setLog( $actionsTableDataset );
-
-        foreach( $estimationIds as $estimationId ) {
-          $this->app->db->query( "INSERT INTO orders_estimations
-            SET order_id = {$orderId}, estimation_id = {$estimationId}" );
-
-          $this->app->db->query( "UPDATE estimations
-            SET is_used = 1 WHERE estimation_id = {$estimationId}" );
-        }
 
         $q1 = $this->app->db->query( "SELECT * FROM orders WHERE order_id = {$orderId}" );
       }
@@ -4441,7 +4523,7 @@ class Api {
     }
   }
 
-  public function assets() : void {
+  private function assets() : void {
     $this->checkAccessLevel( anonymousIsAllowed: false );
 
     $myRole = $this->app->user['role_title'];
@@ -4795,6 +4877,7 @@ class Api {
   
           $newFileName = basename( $this->app->files['asset']['name'][ $fileIndex ] );
           $ext = mb_strrchr( $newFileName, '.' ) ?: ".000";
+          $ext = str_replace( ['..', '/', '\\'], '', $ext );
           $newFileName = md5( $newFileName . random_bytes(16) ) . $ext;
   
           $fileHash = hash_file( 'md5', $filename );
@@ -4972,7 +5055,7 @@ class Api {
     }
   }
 
-  public function users() : void {
+  private function users() : void {
     $this->checkAccessLevel( anonymousIsAllowed: true );
 
     $myRole = $this->app->user['role_title'];
@@ -5450,7 +5533,7 @@ class Api {
       if ( !empty( $data->lastName ) ) 
         $usersTableDataset['last_name'] = $this->app->db->extendedEscape( $data->lastName );
 
-      if ( !empty( $data->birthDate ) ) 
+      if ( isset( $data->birthDate ) ) 
         $usersTableDataset['birth_date'] = intval( $data->birthDate / 1000 );
 
       if ( !empty( $data->address ) ) 
@@ -5786,6 +5869,264 @@ class Api {
     }
   }
 
+  private function payment() : void {
+    $this->checkAccessLevel( anonymousIsAllowed: true );
+
+    $myRole = $this->app->user['role_title'];
+    $myUserId = $this->app->user['user_id'];
+
+    $dt = new \DateTime();
+    $currentTime = $dt->getTimestamp();
+
+    if ( $this->app->requestMethod === 'GET' ) {
+      $userUuid = $myRole === 'admin' ? $this->app->db->extendedEscape( $this->app->get['accountId'] ?? "" ) : $this->app->user['user_uuid'];
+
+      $paymentsCount = 0;
+
+      if ( mb_strlen( $userUuid ) > 0 ) {
+        $q0 = $this->app->db->query( "SELECT * FROM users WHERE user_uuid = \"{$userUuid}\" AND deleted = 0" );
+
+        if ( !$q0->num_rows ) {
+          $this->printError( 404, 2510 );
+        }
+
+        $user = $q0->fetch_assoc();
+        $q0->free();
+
+        $userId = intval( $user['user_id'] );
+
+        $offset = intval( $this->app->get['offset'] ?? 0 );
+        $limit = intval( $this->app->get['limit'] ?? Settings::PAGINATION_MAX_LIMIT );
+        $limit = $limit <= Settings::PAGINATION_MAX_LIMIT ? $limit : Settings::PAGINATION_MAX_LIMIT;
+
+        $q1 = $this->app->db->query( "SELECT * FROM payments WHERE user_id = {$userId} ORDER BY created DESC LIMIT {$offset}, {$limit}" );
+
+        $q2 = $this->app->db->query( "SELECT COUNT(*) AS table_rows FROM payments WHERE user_id = {$userId}" );
+
+        if ( !$q2->num_rows ) {
+          $paymentsCount = 0;
+        }
+        else {
+          $paymentsCount = intval( $q2->fetch_assoc()['table_rows'] );
+          $q2->free();
+        }
+      }
+      else {
+        $offset = intval( $this->app->get['offset'] ?? 0 );
+        $limit = intval( $this->app->get['limit'] ?? Settings::PAGINATION_MAX_LIMIT );
+        $limit = $limit <= Settings::PAGINATION_MAX_LIMIT ? $limit : Settings::PAGINATION_MAX_LIMIT;
+
+        $q1 = $this->app->db->query( "SELECT * FROM payments ORDER BY created DESC LIMIT {$offset}, {$limit}" );
+
+        $q2 = $this->app->db->query( "SELECT COUNT(*) AS table_rows FROM payments" );
+
+        if ( !$q2->num_rows ) {
+          $paymentsCount = 0;
+        }
+        else {
+          $paymentsCount = intval( $q2->fetch_assoc()['table_rows'] );
+          $q2->free();
+        }
+      }
+
+      $payments = [];
+      $dt = new \DateTime();
+
+      while( $payment = $q1->fetch_assoc() ) {
+        $userId = intval( $payment['user_id'] );
+        $orderId = intval( $payment['order_id'] );
+
+        $q0 = $this->app->db->query( "SELECT * FROM users WHERE user_id = {$userId}" );
+
+        if ( !$q0->num_rows ) {
+          continue;
+        }
+
+        $user = $q0->fetch_assoc();
+        $q0->free();
+
+        $q0 = $this->app->db->query( "SELECT * FROM orders WHERE order_id = {$orderId}" );
+
+        if ( !$q0->num_rows ) {
+          continue;
+        }
+
+        $order = $q0->fetch_assoc();
+        $q0->free();
+
+        $dt->setTimestamp( intval( $payment['created'] ) );
+        $paymentCreated = $this->formatDateTimeRepresentation( $dt );
+
+        if ( $myRole === 'admin' ) {
+          $payments[] = [
+            'paymentId' => $payment['payment_uuid'],
+            'provider' => $payment['provider'],
+            'paymentType' => $payment['payment_type'],
+            'externalId' => $payment['external_id'],
+            'orderId' => $order['order_uuid'],
+            'accountId' => $user['user_uuid'],
+            'username' => $user['username'],
+            'amount' => floatval( $payment['amount'] ),
+            'currency' => $payment['currency'],
+            'created' => $paymentCreated,
+          ];
+        }
+        else {
+          $payments[] = [
+            'paymentId' => $payment['payment_uuid'],
+            'provider' => $payment['provider'],
+            'paymentType' => $payment['payment_type'],
+            'externalId' => $payment['external_id'],
+            'orderId' => $order['order_uuid'],
+            'accountId' => $user['user_uuid'],
+            'username' => $user['username'],
+            'amount' => floatval( $payment['amount'] ),
+            'currency' => $payment['currency'],
+            'created' => $paymentCreated,
+          ];
+        }
+      }
+
+      $q1->free();
+
+      $payments = [
+        "count" => $paymentsCount,
+        "payments" => $payments
+      ];
+
+      $this->printResponse( $payments );
+    }
+    else if ( $this->app->requestMethod === 'POST' ) {
+      $data = trim( @file_get_contents('php://input') );
+      $data = @json_decode( $data );
+
+      if ( !is_object( $data ) ) {
+        $this->printError( 403, 1090 );
+      }
+
+      $token = $this->app->db->extendedEscape( $data->token ?? "" );
+      $amountInCents = intval( $data->amountInCents ?? 0 );
+      $currency = $this->app->db->extendedEscape( $data->currency ?? "" );
+      $orderUuid = $this->app->db->extendedEscape( $data->orderId ?? "" );
+
+      if ( !$token || !$amountInCents || !$currency ) {
+        $this->printError( 403, 2512 );
+      }
+
+      $q0 = $this->app->db->query( "SELECT order_id FROM orders WHERE order_uuid = {$orderUuid} AND deleted = 0" );
+
+      if ( !$q0->num_rows ) {
+        $this->printError( 403, 2513 );
+      }
+
+      $orderId = intval( $q0->fetch_assoc()['order_id'] );
+      $q0->free();
+
+      $postData = [
+        'token' => $token, // Your token for this transaction here
+        'amountInCents' => $amountInCents, // payment in cents amount here
+        'currency' => $currency // currency here
+      ];
+
+      $secretKey = Settings::YOCO_SECRET_KEY;
+
+      // Initialise the curl handle
+      $ch = curl_init();
+
+      // Setup curl
+      curl_setopt($ch, CURLOPT_URL, Endpoints::YOCO_PAYMENT_URL);
+      curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+      curl_setopt($ch, CURLOPT_POST, true);
+
+      // Basic Authentication method
+      // Specify the secret key using the CURLOPT_USERPWD option
+      curl_setopt($ch, CURLOPT_USERPWD, $secretKey . ":");
+
+      curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData));
+
+      // send to yoco
+      $result = curl_exec($ch);
+      $httpCode = intval( curl_getinfo($ch, CURLINFO_HTTP_CODE) );
+
+      // close the connection
+      curl_close($ch);
+
+      // convert response to a usable object
+      $paymentSystemResponse = @json_decode($result);
+
+      if ( $httpCode !== 201 
+        || !is_object( $paymentSystemResponse ) 
+        || !isset( $paymentSystemResponse->status ) 
+        || $paymentSystemResponse->status !== "successful" ) {
+        $this->printResponse((array) $paymentSystemResponse);
+      }
+
+      $paymentsTableDataset = [];
+
+      $paymentsTableDataset['payment_uuid'] = Utils::generateUUID4();
+      $paymentsTableDataset['provider'] = 'yoco';
+      $paymentsTableDataset['payment_type'] = $this->app->db->extendedEscape( $paymentSystemResponse->object ?? "" );
+      $paymentsTableDataset['external_id'] = $this->app->db->extendedEscape( $paymentSystemResponse->id ?? "" );
+      $paymentsTableDataset['order_id'] = $orderId;
+      $paymentsTableDataset['user_id'] = $myUserId;
+      $paymentsTableDataset['amount'] = round( $paymentSystemResponse->amountInCents / 100, 2 );
+      $paymentsTableDataset['currency'] = $this->app->db->extendedEscape( $paymentSystemResponse->currency ?? "" );
+      $paymentsTableDataset['created'] = $currentTime;
+
+      $sqlSlicePayment = [];
+
+      foreach( $paymentsTableDataset as $key => $value ) {
+        if ( is_int( $value ) || is_float( $value ) )
+          $sqlSlicePayment[] = "{$key} = {$value}";
+        else
+          $sqlSlicePayment[] = "{$key} = \"{$value}\"";
+      }
+
+      $sqlSlicePayment = implode( ", ", $sqlSlicePayment );
+
+      $this->app->db->query( "INSERT INTO payments SET {$sqlSlicePayment}" );
+      $paymentId = intval( $this->app->db->insert_id );
+
+      if ( !$paymentId ) {
+        $this->printError( 500, 1025 );
+      }
+
+      $actionsTableDataset = [
+        'user_uuid' => $this->app->user['user_uuid'],
+        'username' => $this->app->user['username'],
+        'role' => $this->app->user['role_title'],
+        'to_user_uuid' => '',
+        'to_username' => '',
+        'entity_id' => $paymentId,
+        'action' => 'insert',
+        'fields' => $this->app->db->extendedEscape( $sqlSlicePayment ),
+        'where_clause' => '',
+        'description' => 'inserted payment data',
+        'created' => $currentTime,
+        'deleted' => 0 
+      ];
+
+      $this->setLog( $actionsTableDataset );
+
+      $dt->setTimestamp( intval( $paymentsTableDataset['created'] ) );
+      $paymentCreated = $this->formatDateTimeRepresentation( $dt );
+
+      $this->printResponse([
+        'paymentId' => $paymentsTableDataset['payment_uuid'],
+        'provider' => $paymentsTableDataset['provider'],
+        'paymentType' => $paymentsTableDataset['payment_type'],
+        'externalId' => $paymentsTableDataset['external_id'],
+        'orderId' => $orderUuid,
+        'amount' => floatval( $paymentsTableDataset['amount'] ),
+        'currency' => $paymentsTableDataset['currency'],
+        'created' => $paymentCreated,
+      ]);
+    }
+    else {
+      $this->printError( 405, 106 );
+    }
+  }
+
   private function setLog( array $actionsTableDataset ) : void {
     $sqlSliceActions = [];
 
@@ -5831,7 +6172,7 @@ class Api {
       header( 'WWW-Authenticate: Bearer realm="DefaultRealm"' );
     }
 
-    $text = $this->app->lang[ 'api_code_' . $code ] ?? throw new \Exception( $this->app->lang[ 'api_code_1000' ] );
+    $text = $this->app->lang[ 'api_code_' . $code ] ?? $this->app->lang[ 'api_code_1000' ];
 
     echo json_encode( [
       "state" => "fail",
@@ -5860,7 +6201,7 @@ class Api {
   private function printHeaders( int $httpCode = 200 ) : void {
     // preflight request
     if ( $this->app->requestMethod === 'OPTIONS' ) {
-      header( "{$this->app->http_protocol} 204" );
+      header( "{$this->app->http_protocol} 204 No Content" );
       header( "Access-Control-Allow-Origin: {$this->app->http_origin}" );
       header( "Vary: Origin" );
       header( "Access-Control-Allow-Credentials: true" );
@@ -5871,7 +6212,7 @@ class Api {
     }
     // GET, POST
     else if ( in_array( $this->app->requestMethod, [ 'GET', 'POST' ] ) ) {
-      header( "{$this->app->http_protocol} {$httpCode}" );
+      header( "{$this->app->http_protocol} {$httpCode} {$this->httpStatuses[$httpCode]}" );
       header( "Access-Control-Allow-Origin: {$this->app->http_origin}" );
       header( "Vary: Origin" );
       header( "Access-Control-Allow-Credentials: true" );
@@ -5880,7 +6221,7 @@ class Api {
       header( "Content-Type: application/json; charset=UTF-8" );
     }
     else {
-      header( "{$this->app->http_protocol} 501" );
+      header( "{$this->app->http_protocol} 501 Not Implemented" );
       die("Not implemented.");
     }
   }

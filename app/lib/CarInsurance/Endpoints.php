@@ -18,5 +18,8 @@ class Endpoints {
     public const API_VEHICLES_DATA = self::API_URL . 'vehiclesData';
     public const API_ACCESSORIES = self::API_URL . 'accessories';
     public const API_ASSETS = self::API_URL . 'assets';
+    public const API_PAYMENT = self::API_URL . 'payment';
     public const API_LOGS = self::API_URL . 'logs';
+    
+    public const YOCO_PAYMENT_URL = "https://online.yoco.com/v1/charges/";
 }

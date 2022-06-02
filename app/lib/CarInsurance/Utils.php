@@ -62,7 +62,7 @@ final class Utils {
 		$imageData = @getimagesize($url);
 	  
 		if ( !$imageData || !is_array( $imageData ) || count( $imageData ) < 3 ) {
-			header( "{$_SERVER['SERVER_PROTOCOL']} 404" );
+			header( "{$_SERVER['SERVER_PROTOCOL']} 404 Not Found" );
 			exit("Bad image");
 		}
 	  
@@ -106,7 +106,7 @@ final class Utils {
 			imagedestroy($newImage);
 		}
 		else {
-			header( "{$_SERVER['SERVER_PROTOCOL']} 404" );
+			header( "{$_SERVER['SERVER_PROTOCOL']} 404 Not Found" );
 			exit("Bad image");
 		}
 	}

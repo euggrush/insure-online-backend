@@ -42,6 +42,7 @@ class Language {
             'api_code_1022' => "Internal error: could not create accessory.",
             'api_code_1023' => "Internal error: could not create vehicle data entry.",
             'api_code_1024' => "Internal error: vehicle data entry is not created or updated.",
+            'api_code_1025' => "Internal error: could not insert payment data.",
             'api_code_101' => "Login or password is empty.",
             'api_code_102' => "Login or password is incorrent.",
             'api_code_103' => "You don't have permissions to access to this section.",
@@ -96,6 +97,7 @@ class Language {
             'api_code_1917' => "Car value limit exceeded.",
             'api_code_1918' => "Estimation type should be \"estimation\" or \"accessory\".",
             'api_code_1919' => "One of the selected accessories is not found.",
+            'api_code_1920' => "Invalid start date of insurance.",
             'api_code_201' => "Orders are not found.",
             'api_code_2010' => "Specified account is not found.",
             'api_code_2011' => "Invalid input data.",
@@ -136,6 +138,10 @@ class Language {
             'api_code_2411' => "Specified accessory is not found.",
             'api_code_2412' => "Accessory name cannot be empty.",
             'api_code_2413' => "Accessory cost must be greater than 0.",
+            'api_code_2510' => "Specified account is not found.",
+            'api_code_2511' => "Specified account has no payments.",
+            'api_code_2512' => "Card details is not filled properly.",
+            'api_code_2513' => "Specified order is not found.",
             'module_not_found' => 'Module is not found.',
         ];
     }

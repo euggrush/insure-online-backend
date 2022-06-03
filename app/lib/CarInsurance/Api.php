@@ -2789,7 +2789,7 @@ final class Api {
   }
 
   private function accessories() : void {
-    $this->checkAccessLevel( anonymousIsAllowed: true );
+    $this->checkAccessLevel( anonymousIsAllowed: false );
 
     $myRole = $this->app->user['role_title'];
     $myUserId = $this->app->user['user_id'];
@@ -5870,7 +5870,7 @@ final class Api {
   }
 
   private function payment() : void {
-    $this->checkAccessLevel( anonymousIsAllowed: true );
+    $this->checkAccessLevel( anonymousIsAllowed: false );
 
     $myRole = $this->app->user['role_title'];
     $myUserId = $this->app->user['user_id'];
@@ -6013,7 +6013,7 @@ final class Api {
         $this->printError( 403, 2512 );
       }
 
-      $q0 = $this->app->db->query( "SELECT order_id FROM orders WHERE order_uuid = {$orderUuid} AND deleted = 0" );
+      $q0 = $this->app->db->query( "SELECT order_id FROM orders WHERE order_uuid = \"{$orderUuid}\" AND deleted = 0" );
 
       if ( !$q0->num_rows ) {
         $this->printError( 403, 2513 );

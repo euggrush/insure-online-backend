@@ -6203,6 +6203,10 @@ final class Api {
       $token = $this->app->db->extendedEscape( $data->token ?? "" );
 
       if ( mb_strlen( $email ) > 0 ) {
+        if ( !filter_var( $email, FILTER_VALIDATE_EMAIL ) ) {
+          $this->printError( 403, 2611 );
+        }
+
         $q1 = $this->app->db->query( "SELECT * FROM users 
           WHERE email = \"{$email}\" AND deleted = 0 AND banned = 0" );
 

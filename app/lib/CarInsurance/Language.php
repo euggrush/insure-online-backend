@@ -142,6 +142,10 @@ class Language {
             'api_code_2511' => "Specified account has no payments.",
             'api_code_2512' => "Card details is not filled properly.",
             'api_code_2513' => "Specified order is not found.",
+            'api_code_2610' => "Action is not supported.",
+            'api_code_2611' => "Specified email is not found.",
+            'api_code_2612' => "You have already recently tried to reset your password. Try again after a few minutes.",
+            'api_code_2613' => "Invalid request. Please send again email for password reset.",
             'module_not_found' => 'Module is not found.',
         ];
     }

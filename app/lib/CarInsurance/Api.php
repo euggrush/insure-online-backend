@@ -86,6 +86,10 @@ final class Api {
         $this->payment();
       break;
 
+      case Endpoints::API_RESET_PASSWORD:
+        $this->resetPassword();
+      break;
+
       default:
         $this->printError( 501, 105 );
       break;
@@ -287,6 +291,27 @@ final class Api {
         if ( $q100->num_rows ) {
           $this->app->db->query( "UPDATE users SET is_validated = 1 WHERE email = \"{$email}\"" );
           $q100->free();
+
+          $vars = [];
+          $vars['username'] = $this->app->user['username'];
+          $vars['email'] = $email;
+
+          $title = $this->getResourceByKey( 'welcomeEmailTitle' );
+          $body = $this->getResourceByKey( 'welcomeEmail' ) ;
+
+          foreach( $vars as $key => $value ) {
+            $body = str_replace( "{{" . $key . "}}", $value, $body );
+          }
+
+          $emailIsSent = $this->sendMail([
+            'to' => $this->app->user['email'],
+            'subject' => $title,
+            'body' => $body,
+          ]);
+
+          if ( !$emailIsSent ) {
+            $this->printError( 500, 1021 );
+          }
         }
         else {
           $this->printError( 403, 112 );
@@ -315,12 +340,21 @@ final class Api {
           user_id = {$this->app->user['user_id']}, 
           last_time = {$currentTime}" );
 
-        $newCode = intval( $this->app->user['validation_code'] );
+        $vars = [];
+        $vars['username'] = $this->app->user['username'];
+        $vars['newCode'] = intval( $this->app->user['validation_code'] );
+
+        $title = $this->getResourceByKey( 'validationEmailTitle' );
+        $body = $this->getResourceByKey( 'validationEmail' ) ;
+
+        foreach( $vars as $key => $value ) {
+          $body = str_replace( "{{" . $key . "}}", $value, $body );
+        }
 
         $emailIsSent = $this->sendMail([
-          'to' => $this->app->user['email'],
-          'subject' => 'Action required',
-          'body' => "Hi there, {$this->app->user['username']}. For confirm your personality, we've sent confirmation code for you. It is {$newCode}. Have a nice day.",
+          'to' => $email,
+          'subject' => $title,
+          'body' => $body,
         ]);
 
         if ( !$emailIsSent ) {
@@ -4483,10 +4517,20 @@ final class Api {
       $q9->free();
 
       if ( $mode === 'update' && mb_strlen( $orderStatus ) > 0 && $myRole === 'admin' ) {
+        $vars = [];
+        $vars['orderStatus'] = $orderStatus;
+
+        $title = $this->getResourceByKey( 'orderStatusEmailTitle' );
+        $body = $this->getResourceByKey( 'orderStatusEmail' ) ;
+
+        foreach( $vars as $key => $value ) {
+          $body = str_replace( "{{" . $key . "}}", $value, $body );
+        }
+
         $emailIsSent = $this->sendMail([
           'to' => $user['email'],
-          'subject' => 'Order status has changed',
-          'body' => "Your order has been <b>{$orderStatus}</b>.<br><br>\n\nThis message is generated automatically. Don't reply it.",
+          'subject' => $title,
+          'body' => $body,
         ]);
 
         if ( !$emailIsSent ) {
@@ -5507,7 +5551,22 @@ final class Api {
         $this->printError( 403, 1090 );
       }
 
-      $userUuid = $this->app->db->extendedEscape( $data->accountId ?? "" );
+      if ( $myRole !== 'admin' ) {
+        if ( $myUserId > 0 ) {
+          $userUuid = $this->app->user['user_uuid'];
+        }
+        else {
+          $userUuid = "";
+        }
+      }
+      else {
+        if ( $myUserId > 0 ) {
+          $userUuid = $this->app->db->extendedEscape( $data->accountId ?? $this->app->user['user_uuid'] );
+        }
+        else {
+          $userUuid = "";
+        }
+      }
 
       $ratingTableDataset = [];
 
@@ -5582,9 +5641,6 @@ final class Api {
         $mode = 'create';
 
       if ( $mode === 'create' ) {
-        if ( $myUserId > 0 && $myRole !== 'admin' ) {
-          $this->printError( 403, 103 );
-        }
 
         $usersTableDataset['user_uuid'] = Utils::generateUUID4();
         $usersTableDataset['client_id'] = intval( $data->clientIdNumber ?? random_int( 100000000000, 999999999999 ) );
@@ -5679,15 +5735,10 @@ final class Api {
         
       }
       else if ( $mode === 'update' ) {
-        if ( !$myUserId ) {
-          $this->printError( 403, 103 );
-        }
 
         $usersTableDataset['updated'] = $currentTime;
 
         if ( $myRole !== 'admin' ) {
-          $userUuid = $this->app->user['user_uuid'];
-  
           /*
           if ( !password_verify( $password, $this->app->user['pswd_h'] ) ) {
             $this->printError( 403, 110 );
@@ -6127,6 +6178,136 @@ final class Api {
     }
   }
 
+  private function resetPassword() : void {
+    $this->checkAccessLevel( anonymousIsAllowed: true );
+
+    $myRole = $this->app->user['role_title'];
+    $myUserId = $this->app->user['user_id'];
+
+    $dt = new \DateTime();
+    $currentTime = $dt->getTimestamp();
+
+    if ( $myUserId > 0 ) {
+      $this->printError( 403, 2610 );
+    }
+
+    if ( $this->app->requestMethod === 'POST' ) {
+      $data = trim( @file_get_contents('php://input') );
+      $data = @json_decode( $data );
+
+      if ( !is_object( $data ) ) {
+        $this->printError( 403, 1090 );
+      }
+
+      $email = $this->app->db->extendedEscape( $data->email ?? "" );
+      $token = $this->app->db->extendedEscape( $data->token ?? "" );
+
+      if ( mb_strlen( $email ) > 0 ) {
+        $q1 = $this->app->db->query( "SELECT * FROM users 
+          WHERE email = \"{$email}\" AND deleted = 0 AND banned = 0" );
+
+        if ( !$q1->num_rows ) {
+          $this->printError( 403, 2611 );
+        }
+
+        $user = $q1->fetch_assoc();
+        $q1->free();
+
+        $resetPasswordEmailSent = intval( $user['reset_password_email_sent'] );
+
+        if ( $currentTime - $resetPasswordEmailSent < 1 ) {
+          $this->printError( 403, 2612 );
+        }
+
+        $newToken = hash( 'sha256', random_bytes(16) );
+
+        $vars = [];
+        //$vars['link'] = "{$this->app->http_scheme}://{$this->app->http_host}/?act=resetPassword&amp;token={$newToken}";
+        $vars['link'] = "https://euggrush.github.io/?act=resetPassword&amp;token={$newToken}";
+
+        $title = $this->getResourceByKey( 'resetPasswordEmailTitle' );
+        $body = $this->getResourceByKey( 'resetPasswordEmail' ) ;
+
+        foreach( $vars as $key => $value ) {
+          $body = str_replace( "{{" . $key . "}}", $value, $body );
+        }
+
+        $this->app->db->query( <<<SQL
+          UPDATE users 
+          SET 
+            reset_password_token = "{$newToken}", 
+            reset_password_token_is_used = 0, 
+            reset_password_email_sent = {$currentTime} 
+          WHERE email = "{$email}"
+        SQL );
+
+        $emailIsSent = $this->sendMail([
+          'to' => $user['email'],
+          'subject' => $title,
+          'body' => $body,
+        ]);
+
+        if ( !$emailIsSent ) {
+          $this->printError( 500, 1021 );
+        }
+
+        $this->printResponse();
+      }
+      else if ( mb_strlen( $token ) > 0 ) {
+        $q1 = $this->app->db->query( "SELECT * FROM users 
+          WHERE reset_password_token = \"{$token}\" AND reset_password_token_is_used = 0" );
+
+        if ( !$q1->num_rows ) {
+          $this->printError( 403, 2613 );
+        }
+
+        $user = $q1->fetch_assoc();
+        $q1->free();
+
+        $userId = intval( $user['user_id'] );
+
+        $newPassword = Utils::generateStrongPassword();
+        $newPasswordHashed = $this->app->db->extendedEscape( password_hash( $newPassword, Settings::PASSWORD_HASH_ALGO ) );
+
+        $this->app->db->query( <<<SQL
+          UPDATE users 
+          SET 
+            pswd_h = "{$newPasswordHashed}", 
+            reset_password_token_is_used = 1 
+          WHERE user_id = {$userId}
+        SQL );
+
+        $actionsTableDataset = [
+          'user_uuid' => $user['user_uuid'],
+          'username' => $user['username'],
+          'role' => '',
+          'to_user_uuid' => '',
+          'to_username' => '',
+          'entity_id' => '',
+          'action' => 'update',
+          'fields' => $this->app->db->extendedEscape( "pswd_h = \"{$newPasswordHashed}\", reset_password_token_is_used = 1" ),
+          'where_clause' => $this->app->db->extendedEscape( "user_id = {$userId}" ),
+          'description' => 'updated password',
+          'created' => $currentTime,
+          'deleted' => 0 
+        ];
+  
+        $this->setLog( $actionsTableDataset );
+  
+        $this->printResponse([
+          'newPassword' => $newPassword,
+        ]);
+        
+      }
+      else {
+        $this->printError( 403, 103 );
+      }
+    }
+    else {
+      $this->printError( 405, 106 );
+    }
+  }
+
   private function setLog( array $actionsTableDataset ) : void {
     $sqlSliceActions = [];
 
@@ -6163,6 +6344,21 @@ final class Api {
         }
       }
     }
+  }
+
+  private function getResourceByKey( string $key ) : string {
+    $key = $this->app->db->extendedEscape( $key );
+
+    $q10 = $this->app->db->query( "SELECT * FROM resources WHERE r_key = \"{$key}\"" );
+
+    $value = "";
+
+    if ( $q10->num_rows ) {
+      $value = $q10->fetch_assoc()['r_value'];
+      $q10->free();
+    }
+
+    return $value;
   }
 
   private function printError( int $httpCode = 404, int $code = 0 ) : void {

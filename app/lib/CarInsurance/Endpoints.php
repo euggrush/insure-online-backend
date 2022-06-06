@@ -20,6 +20,7 @@ class Endpoints {
     public const API_ASSETS = self::API_URL . 'assets';
     public const API_PAYMENT = self::API_URL . 'payment';
     public const API_LOGS = self::API_URL . 'logs';
+    public const API_RESET_PASSWORD = self::API_URL . 'resetPassword';
     
     public const YOCO_PAYMENT_URL = "https://online.yoco.com/v1/charges/";
 }

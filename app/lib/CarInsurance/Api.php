@@ -6215,7 +6215,7 @@ final class Api {
 
         $resetPasswordEmailSent = intval( $user['reset_password_email_sent'] );
 
-        if ( $currentTime - $resetPasswordEmailSent < 1 ) {
+        if ( $currentTime - $resetPasswordEmailSent < 600 ) {
           $this->printError( 403, 2612 );
         }
 

@@ -1850,6 +1850,7 @@ final class Api {
     if ( $this->app->requestMethod === 'GET' ) {
       $mainProductUuid = $this->app->db->extendedEscape( $this->app->get['mainProductId'] ?? "" );
       $categoryUuid = $this->app->db->extendedEscape( $this->app->get['categoryId'] ?? "" );
+      $productType = $this->app->db->extendedEscape( $this->app->get['productType'] ?? "" );
       $showDeleted = $myRole === 'admin' ? boolval( $this->app->get['showDeleted'] ?? false ) : false;
 
       $sqlWhereAndConditionHideDeleted = !$showDeleted ? " AND deleted = 0" : "";
@@ -1860,6 +1861,27 @@ final class Api {
       if ( mb_strlen( $mainProductUuid ) > 0 ) {
         $q1 = $this->app->db->query( "SELECT * FROM main_products WHERE product_uuid = \"{$mainProductUuid}\"{$sqlWhereAndConditionHideDeleted}" );
         $mainProductsCount = 1;
+      }
+      else if ( mb_strlen( $productType ) > 0 ) {
+        $offset = intval( $this->app->get['offset'] ?? 0 );
+        $limit = intval( $this->app->get['limit'] ?? Settings::PAGINATION_MAX_LIMIT );
+        $limit = $limit <= Settings::PAGINATION_MAX_LIMIT ? $limit : Settings::PAGINATION_MAX_LIMIT;
+
+        if ( !in_array( needle : $productType, haystack : [ 'tuffstuff', 'TOPMARQ' ], strict : true ) ) {
+          $this->printError( 404, 1513 );
+        }
+
+        $q1 = $this->app->db->query( "SELECT * FROM main_products WHERE product_type = \"{$productType}\"{$sqlWhereAndConditionHideDeleted} ORDER BY main_product_id ASC LIMIT {$offset}, {$limit}" );
+
+        $q2 = $this->app->db->query( "SELECT COUNT(*) AS table_rows FROM main_products WHERE product_type = \"{$productType}\"{$sqlWhereAndConditionHideDeleted}" );
+
+        if ( !$q2->num_rows ) {
+          $mainProductsCount = 0;
+        }
+        else {
+          $mainProductsCount = intval( $q2->fetch_assoc()['table_rows'] );
+          $q2->free();
+        }
       }
       else if ( mb_strlen( $categoryUuid ) > 0 ) {
         $offset = intval( $this->app->get['offset'] ?? 0 );
@@ -1974,6 +1996,7 @@ final class Api {
         if ( $myRole === 'admin' ) {
           $mainProducts[] = [
             'mainProductId' => $mainProduct['product_uuid'],
+            'productType' => $mainProduct['product_type'],
             'categoryId' => $category['category_uuid'],
             'categoryName' => $category['category_name'],
             'mainProductName' => $mainProduct['product_name'],
@@ -1989,6 +2012,7 @@ final class Api {
         else {
           $mainProducts[] = [
             'mainProductId' => $mainProduct['product_uuid'],
+            'productType' => $mainProduct['product_type'],
             'categoryId' => $category['category_uuid'],
             'categoryName' => $category['category_name'],
             'mainProductName' => $mainProduct['product_name'],
@@ -2026,6 +2050,7 @@ final class Api {
 
       $mainProductUuid = $this->app->db->extendedEscape( $data->mainProductId ?? "" );
       $categoryUuid = $this->app->db->extendedEscape( $data->categoryId ?? "" );
+      $productType = $this->app->db->extendedEscape( $data->productType ?? "" );
 
       $mainProductsTableDataset = [];
 
@@ -2042,6 +2067,14 @@ final class Api {
         $q11->free();
 
         $mainProductsTableDataset['category_id'] = $categoryId;
+      }
+
+      if ( mb_strlen( $productType ) > 0 ) {
+        if ( !in_array( needle : $productType, haystack : [ 'tuffstuff', 'TOPMARQ' ], strict : true ) ) {
+          $this->printError( 404, 1513 );
+        }
+
+        $mainProductsTableDataset['product_type'] = $productType;
       }
 
       if ( !empty( $data->mainProductName ) )
@@ -2187,6 +2220,7 @@ final class Api {
 
       $this->printResponse([
         'mainProductId' => $mainProduct['product_uuid'],
+        'productType' => $mainProduct['product_type'],
         'categoryId' => $category['category_uuid'],
         'categoryName' => $category['category_name'],
         'mainProductName' => $mainProduct['product_name'],
@@ -3272,7 +3306,7 @@ final class Api {
 
         $product = @json_decode( $estimation['products'] );
 
-        if ( $estimation['type'] === "estimation" ) {
+        if ( $estimation['type'] === "tuffstuff" || $estimation['type'] === "topmarq" ) {
           $mainProductUuid = $this->app->db->extendedEscape( $product->mainProductId ?? "" );
 
           $mainProductName = $product->mainProductName ?? "";
@@ -3373,7 +3407,7 @@ final class Api {
         $birthDateFormatted = $this->formatDateTimeRepresentation( $birthDate );
         $userAge = intval( $currentDate->diff( $birthDate )->format( '%Y' ) );
 
-        if ( $estimation['type'] === "estimation" ) {
+        if ( $estimation['type'] === "tuffstuff" || $estimation['type'] === "topmarq" ) {
           $estimations[] = [
             'estimationId' => $estimation['estimation_uuid'],
             'referenceNumber' => intval( $estimation['reference_number'] ),
@@ -3460,7 +3494,7 @@ final class Api {
       $startFrom = intval( intval( $data->startFrom ?? 0 ) / 1000 );
       $vehicleUuid = $this->app->db->extendedEscape( $data->vehicleId ?? "" );
 
-      if ( !in_array( needle: $estimationType, haystack: [ "estimation", "accessory" ], strict: true ) ) {
+      if ( !in_array( needle: $estimationType, haystack: [ "tuffstuff", "accessory", "topmarq" ], strict: true ) ) {
         $this->printError( 403, 1918 );
       }
 
@@ -3517,7 +3551,7 @@ final class Api {
 
       $referenceNumber = random_int( 1000000, 9999999 );
 
-      if ( $estimationType === "estimation" ) {
+      if ( $estimationType === "tuffstuff" || $estimationType === "topmarq" ) {
         if ( !is_array( $subProductsUuids ) ) $subProductsUuids = [];
 
         $productsCost = 0.0;
@@ -3562,34 +3596,58 @@ final class Api {
           $q7->free();
         }
 
-        $rate = (function() use( $userAge, $vehicleRetailValue ) : array|bool {
-          if ( $userAge < 25 ) {
-            return false;
-          }
-          else if ( $userAge >= 25 && $userAge <= 45 ) {
-            if ( $vehicleRetailValue <= 100000 ) 
-              return [ 0.0199, "rating_age25-45_price100000" ];
-            else if ( $vehicleRetailValue > 100000 && $vehicleRetailValue <= 350000 ) 
-              return [ 0.0195, "rating_age25-45_price100000-350000" ];
-            else if ( $vehicleRetailValue > 350000 && $vehicleRetailValue <= 700000 ) 
-              return [ 0.0171, "rating_age25-45_price350000-700000" ];
-            else if ( $vehicleRetailValue > 700000 && $vehicleRetailValue <= 1000000 ) 
-              return [ 0.0165, "rating_age25-45_price700000-1000000" ];
-          }
-          else if ( $userAge > 45 && $userAge < 85 ) {
-            if ( $vehicleRetailValue <= 100000 ) 
-              return [ 0.014, "rating_age45-85_price100000" ];
-            else if ( $vehicleRetailValue > 100000 && $vehicleRetailValue <= 350000 ) 
-              return [ 0.0136, "rating_age45-85_price100000-350000" ];
-            else if ( $vehicleRetailValue > 350000 && $vehicleRetailValue <= 700000 ) 
-              return [ 0.012, "rating_age45-85_price350000-700000" ];
-            else if ( $vehicleRetailValue > 700000 && $vehicleRetailValue <= 1000000 ) 
-              return [ 0.0115, "rating_age45-85_price700000-1000000" ];
-          }
-          else {
-            return false;
-          }
-        })();
+        if ( $estimationType === "tuffstuff" ) {
+          $rate = (function() use( $userAge, $vehicleRetailValue ) : array|bool {
+            if ( $userAge < 25 ) {
+              return false;
+            }
+            else if ( $userAge >= 25 && $userAge <= 45 ) {
+              if ( $vehicleRetailValue <= 100000 ) 
+                return [ 0.0199, "rating_age25-45_price100000" ];
+              else if ( $vehicleRetailValue > 100000 && $vehicleRetailValue <= 350000 ) 
+                return [ 0.0195, "rating_age25-45_price100000-350000" ];
+              else if ( $vehicleRetailValue > 350000 && $vehicleRetailValue <= 700000 ) 
+                return [ 0.0171, "rating_age25-45_price350000-700000" ];
+              else if ( $vehicleRetailValue > 700000 && $vehicleRetailValue <= 1000000 ) 
+                return [ 0.0165, "rating_age25-45_price700000-1000000" ];
+            }
+            else if ( $userAge > 45 && $userAge < 85 ) {
+              if ( $vehicleRetailValue <= 100000 ) 
+                return [ 0.014, "rating_age45-85_price100000" ];
+              else if ( $vehicleRetailValue > 100000 && $vehicleRetailValue <= 350000 ) 
+                return [ 0.0136, "rating_age45-85_price100000-350000" ];
+              else if ( $vehicleRetailValue > 350000 && $vehicleRetailValue <= 700000 ) 
+                return [ 0.012, "rating_age45-85_price350000-700000" ];
+              else if ( $vehicleRetailValue > 700000 && $vehicleRetailValue <= 1000000 ) 
+                return [ 0.0115, "rating_age45-85_price700000-1000000" ];
+            }
+            else {
+              return false;
+            }
+          })();
+        }
+        else if ( $estimationType === "topmarq" ) {
+          $rate = (function() use( $userAge, $vehicleRetailValue ) : array|bool {
+            if ( $userAge < 25 ) {
+              return false;
+            }
+            else if ( $userAge >= 25 && $userAge <= 45 ) {
+              if ( $vehicleRetailValue < 500000 ) 
+                return [ 0.02, "topmarq_rating_age25-45_price500000" ];
+              else if ( $vehicleRetailValue >= 500000 && $vehicleRetailValue <= 1000000 ) 
+                return [ 0.03, "topmarq_rating_age25-45_price500000-1000000" ];
+            }
+            else if ( $userAge > 45 && $userAge < 85 ) {
+              if ( $vehicleRetailValue < 500000 ) 
+                return [ 0.02, "topmarq_rating_age45-85_price500000" ];
+              else if ( $vehicleRetailValue >= 500000 && $vehicleRetailValue <= 1000000 ) 
+                return [ 0.03, "topmarq_rating_age45-85_price500000-1000000" ];
+            }
+            else {
+              return false;
+            }
+          })();
+        }
 
         if ( !$rate ) {
           $this->printError( 403, 1916 );
@@ -3745,7 +3803,7 @@ final class Api {
       $dt->setTimestamp( $currentTime );
       $estimationCreated = $this->formatDateTimeRepresentation( $dt );
 
-      if ( $estimationTableDataset['type'] === "estimation" ) {
+      if ( $estimationTableDataset['type'] === "tuffstuff" || $estimationTableDataset['type'] === "topmarq" ) {
         $this->printResponse([
           'estimationId' => $estimationTableDataset['estimation_uuid'],
           'referenceNumber' => intval( $estimationTableDataset['reference_number'] ),
@@ -3758,6 +3816,7 @@ final class Api {
           'mainProductName' => $mainProduct['product_name'],
           'mainProductCost' => $mainProductCost,
           'subProducts' => $subProducts,
+          'startFromTimestampMs' => $startFrom * 1000,
           'startFromFormatted' => $startFromFormatted,
           'totalCostCalculated' => $totalCostCalculated,
           'totalCost' => $totalCost,
@@ -3774,6 +3833,7 @@ final class Api {
           'vehicleDetails' => $vehicle['details'],
           'vehicleRetailValue' => $vehicleRetailValue,
           'accessories' => $accessories ?? [],
+          'startFromTimestampMs' => $startFrom * 1000,
           'startFromFormatted' => $startFromFormatted,
           'totalCostCalculated' => $totalCostCalculated,
           'totalCost' => $totalCost,
@@ -4017,7 +4077,7 @@ final class Api {
 
           $product = @json_decode( $estimation['products'] );
 
-          if ( $estimation['type'] === "estimation" ) {
+          if ( $estimation['type'] === "tuffstuff" || $estimation['type'] === "topmarq" ) {
             $mainProductUuid = $this->app->db->extendedEscape( $product->mainProductId ?? "" );
 
             $mainProductName = $product->mainProductName ?? "";
@@ -4148,7 +4208,7 @@ final class Api {
           $allEstimationsTotalCost += $totalCost;
           $allEstimationsTotalCostCalculated += $totalCostCalculated;
 
-          if ( $estimation['type'] === "estimation" ) {
+          if ( $estimation['type'] === "tuffstuff" || $estimation['type'] === "topmarq" ) {
             $estimations[] = [
               'estimationId' => $estimation['estimation_uuid'],
               'referenceNumber' => intval( $estimation['reference_number'] ),

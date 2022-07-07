@@ -5,7 +5,7 @@ namespace CarInsurance;
 class Settings {
   
   protected $dbSettings = [
-    'dbhost' => 'localhost',
+    'dbhost' => '',
     'dbuser' => '',
     'dbpass' => '',
     'dbname' => '',
@@ -25,7 +25,7 @@ class Settings {
 
   public const DBNAME = '';
 
-  public const AUTH_ATTEMPTS = 5;
+  public const AUTH_ATTEMPTS = 1000;
   public const AUTH_ATTEMPTS_INTERVAL = "PT30M";
   public const VALIDATION_ATTEMPTS = 5;
   public const VALIDATION_ATTEMPTS_INTERVAL = "PT30M";
@@ -43,7 +43,7 @@ class Settings {
   public const PASSWORD_HASH_ALGO = PASSWORD_DEFAULT;
 
   public const FROM_EMAIL = '';
-  public const FROM_NAME = '';
+  public const FROM_NAME = 'Insure Online';
 
   public const MAIL = [
     'Host'     => '',

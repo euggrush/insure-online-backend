@@ -131,6 +131,7 @@ final class Api {
       return true;
     } catch (Exception) {
       //echo "Message could not be sent. Mailer Error: {$mail->ErrorInfo}";
+      //exit();
       return false;
     }
   }
@@ -1871,7 +1872,7 @@ final class Api {
           $this->printError( 404, 1513 );
         }
 
-        $q1 = $this->app->db->query( "SELECT * FROM main_products WHERE product_type = \"{$productType}\"{$sqlWhereAndConditionHideDeleted} ORDER BY main_product_id ASC LIMIT {$offset}, {$limit}" );
+        $q1 = $this->app->db->query( "SELECT * FROM main_products WHERE product_type = \"{$productType}\"{$sqlWhereAndConditionHideDeleted} ORDER BY main_product_id DESC LIMIT {$offset}, {$limit}" );
 
         $q2 = $this->app->db->query( "SELECT COUNT(*) AS table_rows FROM main_products WHERE product_type = \"{$productType}\"{$sqlWhereAndConditionHideDeleted}" );
 
@@ -1897,7 +1898,7 @@ final class Api {
         $categoryId = intval( $q0->fetch_assoc()['category_id'] );
         $q0->free();
 
-        $q1 = $this->app->db->query( "SELECT * FROM main_products WHERE category_id = {$categoryId}{$sqlWhereAndConditionHideDeleted} ORDER BY main_product_id ASC LIMIT {$offset}, {$limit}" );
+        $q1 = $this->app->db->query( "SELECT * FROM main_products WHERE category_id = {$categoryId}{$sqlWhereAndConditionHideDeleted} ORDER BY main_product_id DESC LIMIT {$offset}, {$limit}" );
 
         $q2 = $this->app->db->query( "SELECT COUNT(*) AS table_rows FROM main_products WHERE category_id = {$categoryId}{$sqlWhereAndConditionHideDeleted}" );
 
@@ -1914,7 +1915,7 @@ final class Api {
         $limit = intval( $this->app->get['limit'] ?? Settings::PAGINATION_MAX_LIMIT );
         $limit = $limit <= Settings::PAGINATION_MAX_LIMIT ? $limit : Settings::PAGINATION_MAX_LIMIT;
 
-        $q1 = $this->app->db->query( "SELECT * FROM main_products{$sqlWhereConditionHideDeleted} ORDER BY main_product_id ASC LIMIT {$offset}, {$limit}" );
+        $q1 = $this->app->db->query( "SELECT * FROM main_products{$sqlWhereConditionHideDeleted} ORDER BY main_product_id DESC LIMIT {$offset}, {$limit}" );
 
         $q2 = $this->app->db->query( "SELECT COUNT(*) AS table_rows FROM main_products{$sqlWhereConditionHideDeleted}" );
 
@@ -2271,7 +2272,7 @@ final class Api {
         $mainProductId = intval( $q0->fetch_assoc()['main_product_id'] );
         $q0->free();
 
-        $q1 = $this->app->db->query( "SELECT * FROM sub_products WHERE main_product_id = {$mainProductId}{$sqlWhereAndConditionHideDeleted}" );
+        $q1 = $this->app->db->query( "SELECT * FROM sub_products WHERE main_product_id = {$mainProductId}{$sqlWhereAndConditionHideDeleted} ORDER BY sub_product_id DESC" );
         $subProductsCount = $q1->num_rows;
       }
       else if ( mb_strlen( $categoryUuid ) > 0 ) {
@@ -2288,7 +2289,7 @@ final class Api {
         $categoryId = intval( $q0->fetch_assoc()['category_id'] );
         $q0->free();
 
-        $q00 = $this->app->db->query( "SELECT main_product_id FROM main_products WHERE category_id = {$categoryId}{$sqlWhereAndConditionHideDeleted} ORDER BY main_product_id ASC" );
+        $q00 = $this->app->db->query( "SELECT main_product_id FROM main_products WHERE category_id = {$categoryId}{$sqlWhereAndConditionHideDeleted} ORDER BY main_product_id DESC" );
 
         if ( !$q00->num_rows ) {
           $this->printError( 404, 1512 );
@@ -2304,7 +2305,7 @@ final class Api {
 
         $mainProductsIds = implode( ',', $mainProductsIds );
 
-        $q1 = $this->app->db->query( "SELECT * FROM sub_products WHERE main_product_id IN ({$mainProductsIds}){$sqlWhereAndConditionHideDeleted} ORDER BY sub_product_id ASC LIMIT {$offset}, {$limit}" );
+        $q1 = $this->app->db->query( "SELECT * FROM sub_products WHERE main_product_id IN ({$mainProductsIds}){$sqlWhereAndConditionHideDeleted} ORDER BY sub_product_id DESC LIMIT {$offset}, {$limit}" );
 
         $q2 = $this->app->db->query( "SELECT COUNT(*) AS table_rows FROM sub_products WHERE main_product_id IN ($mainProductsIds){$sqlWhereAndConditionHideDeleted}" );
 
@@ -2321,7 +2322,7 @@ final class Api {
         $limit = intval( $this->app->get['limit'] ?? Settings::PAGINATION_MAX_LIMIT );
         $limit = $limit <= Settings::PAGINATION_MAX_LIMIT ? $limit : Settings::PAGINATION_MAX_LIMIT;
 
-        $q1 = $this->app->db->query( "SELECT * FROM sub_products{$sqlWhereConditionHideDeleted} ORDER BY sub_product_id ASC LIMIT {$offset}, {$limit}" );
+        $q1 = $this->app->db->query( "SELECT * FROM sub_products{$sqlWhereConditionHideDeleted} ORDER BY sub_product_id DESC LIMIT {$offset}, {$limit}" );
 
         $q2 = $this->app->db->query( "SELECT COUNT(*) AS table_rows FROM sub_products{$sqlWhereConditionHideDeleted}" );
 
@@ -3283,6 +3284,8 @@ final class Api {
       $estimations = [];
       $dt = new \DateTime();
 
+      $uniqueEstimationHashes = [];
+
       while ( $estimation = $q1->fetch_assoc() ) {
         $estimationId = intval( $estimation['estimation_id'] );
         $userId = intval( $estimation['user_id'] );
@@ -3306,6 +3309,13 @@ final class Api {
 
         $product = @json_decode( $estimation['products'] );
 
+        $uniqueEstimationHash = [];
+
+        $uniqueEstimationHash[] = $estimation['type'];
+        $uniqueEstimationHash[] = $userId;
+        $uniqueEstimationHash[] = $vehicleId;
+
+
         if ( $estimation['type'] === "tuffstuff" || $estimation['type'] === "topmarq" ) {
           $mainProductUuid = $this->app->db->extendedEscape( $product->mainProductId ?? "" );
 
@@ -3325,11 +3335,15 @@ final class Api {
 
           if ( !$q6->num_rows ) continue;
 
+          $uniqueEstimationHash[] = $mainProductUuid;
+
           $mainProduct = $q6->fetch_assoc();
           $q6->free();
 
           $mainProductId = intval( $mainProduct['main_product_id'] );
           $mainProductIsDeleted = boolval( $mainProduct['deleted'] );
+
+          $subProductsUuids = [];
 
           foreach( $product->subProducts as $i => $subProduct ) {
             $subProductUuid = $this->app->db->extendedEscape( $subProduct->subProductId ?? "" );
@@ -3346,6 +3360,8 @@ final class Api {
 
             $subProductIsDeleted = boolval( $subProductRow['deleted'] );
 
+            $subProductsUuids[] = $subProductUuid;
+
             $subProducts[] = [
               'subProductId' => $subProductUuid,
               'subProductName' => $subProductName,
@@ -3353,6 +3369,10 @@ final class Api {
               'subProductIsDeleted' => $subProductIsDeleted,
             ];
           }
+
+          sort( $subProductsUuids );
+
+          $uniqueEstimationHash[] = implode( "", $subProductsUuids );
     
           $categoryId = intval( $mainProduct['category_id'] );
     
@@ -3371,7 +3391,21 @@ final class Api {
           }
 
           $accessories = $product;
+
+          $accessoriesUuids = [];
+
+          foreach( $accessories as $accessory ) {
+            $accessoriesUuids[] = $accessory->accessoryId ?? "";
+          }
+
+          sort( $accessoriesUuids );
+
+          $uniqueEstimationHash[] = implode( "", $accessoriesUuids );
         }
+
+        $uniqueEstimationHash[] = $totalCostCalculated;
+
+        $uniqueEstimationHash = hash( "sha256", implode( "::", $uniqueEstimationHash ) );
 
         $q3 = $this->app->db->query( "SELECT * FROM users WHERE user_id = {$userId}{$sqlWhereAndConditionHideDeleted}" );
   
@@ -3407,65 +3441,73 @@ final class Api {
         $birthDateFormatted = $this->formatDateTimeRepresentation( $birthDate );
         $userAge = intval( $currentDate->diff( $birthDate )->format( '%Y' ) );
 
-        if ( $estimation['type'] === "tuffstuff" || $estimation['type'] === "topmarq" ) {
-          $estimations[] = [
-            'estimationId' => $estimation['estimation_uuid'],
-            'referenceNumber' => intval( $estimation['reference_number'] ),
-            'estimationType' => $estimation['type'],
-            'accountId' => $user['user_uuid'],
-            'username' => $user['username'],
-            'firstName' => $user['first_name'],
-            'lastName' => $user['last_name'],
-            'birthDate' => intval( $user['birth_date'] ) * 1000,
-            'birthDateFormatted' => $birthDateFormatted,
-            'age' => $userAge,
-            'address' => $user['address'],
-            'email' => $user['email'],
-            'cellphone' => $user['cellphone'],
-            'vehicleId' => $vehicle['vehicle_uuid'],
-            'vehicleDetails' => $vehicleDetails,
-            'vehicleRetailValue' => $vehicleRetailValue,
-            'vehicleIsDeleted' => $vehicleIsDeleted,
-            'categoryId' => $category['category_uuid'],
-            'categoryName' => $category['category_name'],
-            'mainProductId' => $mainProduct['product_uuid'],
-            'mainProductName' => $mainProductName,
-            'mainProductCost' => $mainProductCost,
-            'mainProductIsDeleted' => $mainProductIsDeleted,
-            'subProducts' => $subProducts,
-            'totalCost' => $totalCost,
-            'startFromFormatted' => $startFromFormatted,
-            'totalCostCalculated' => $totalCostCalculated,
-            'created' => $estimationCreated,
-            'deleted' => $deleted,
-          ];
-        }
-        else if ( $estimation['type'] === "accessory" ) {
-          $estimations[] = [
-            'estimationId' => $estimation['estimation_uuid'],
-            'referenceNumber' => intval( $estimation['reference_number'] ),
-            'estimationType' => $estimation['type'],
-            'accountId' => $user['user_uuid'],
-            'username' => $user['username'],
-            'firstName' => $user['first_name'],
-            'lastName' => $user['last_name'],
-            'birthDate' => intval( $user['birth_date'] ) * 1000,
-            'birthDateFormatted' => $birthDateFormatted,
-            'age' => $userAge,
-            'address' => $user['address'],
-            'email' => $user['email'],
-            'cellphone' => $user['cellphone'],
-            'vehicleId' => $vehicle['vehicle_uuid'],
-            'vehicleDetails' => $vehicleDetails,
-            'vehicleRetailValue' => $vehicleRetailValue,
-            'vehicleIsDeleted' => $vehicleIsDeleted,
-            'accessories' => $accessories,
-            'totalCost' => $totalCost,
-            'startFromFormatted' => $startFromFormatted,
-            'totalCostCalculated' => $totalCostCalculated,
-            'created' => $estimationCreated,
-            'deleted' => $deleted,
-          ];
+        if ( !in_array( needle : $uniqueEstimationHash, haystack : $uniqueEstimationHashes, strict : true ) ) {
+          if ( $estimation['type'] === "tuffstuff" || $estimation['type'] === "topmarq" ) {
+            $estimations[] = [
+              'estimationId' => $estimation['estimation_uuid'],
+              'referenceNumber' => intval( $estimation['reference_number'] ),
+              'estimationType' => $estimation['type'],
+              'accountId' => $user['user_uuid'],
+              'username' => $user['username'],
+              'firstName' => $user['first_name'],
+              'lastName' => $user['last_name'],
+              'email' => $user['email'],
+              'cellphone' => $user['cellphone'],
+              'birthDate' => intval( $user['birth_date'] ) * 1000,
+              'birthDateFormatted' => $birthDateFormatted,
+              'age' => $userAge,
+              'address' => $user['address'],
+              'email' => $user['email'],
+              'cellphone' => $user['cellphone'],
+              'vehicleId' => $vehicle['vehicle_uuid'],
+              'vehicleDetails' => $vehicleDetails,
+              'vehicleRetailValue' => $vehicleRetailValue,
+              'vehicleIsDeleted' => $vehicleIsDeleted,
+              'categoryId' => $category['category_uuid'],
+              'categoryName' => $category['category_name'],
+              'mainProductId' => $mainProduct['product_uuid'],
+              'mainProductName' => $mainProductName,
+              'mainProductCost' => $mainProductCost,
+              'mainProductIsDeleted' => $mainProductIsDeleted,
+              'subProducts' => $subProducts,
+              'totalCost' => $totalCost,
+              'startFromFormatted' => $startFromFormatted,
+              'totalCostCalculated' => $totalCostCalculated,
+              'created' => $estimationCreated,
+              'deleted' => $deleted,
+            ];
+          }
+          else if ( $estimation['type'] === "accessory" ) {
+            $estimations[] = [
+              'estimationId' => $estimation['estimation_uuid'],
+              'referenceNumber' => intval( $estimation['reference_number'] ),
+              'estimationType' => $estimation['type'],
+              'accountId' => $user['user_uuid'],
+              'username' => $user['username'],
+              'firstName' => $user['first_name'],
+              'lastName' => $user['last_name'],
+              'email' => $user['email'],
+              'cellphone' => $user['cellphone'],
+              'birthDate' => intval( $user['birth_date'] ) * 1000,
+              'birthDateFormatted' => $birthDateFormatted,
+              'age' => $userAge,
+              'address' => $user['address'],
+              'email' => $user['email'],
+              'cellphone' => $user['cellphone'],
+              'vehicleId' => $vehicle['vehicle_uuid'],
+              'vehicleDetails' => $vehicleDetails,
+              'vehicleRetailValue' => $vehicleRetailValue,
+              'vehicleIsDeleted' => $vehicleIsDeleted,
+              'accessories' => $accessories,
+              'totalCost' => $totalCost,
+              'startFromFormatted' => $startFromFormatted,
+              'totalCostCalculated' => $totalCostCalculated,
+              'created' => $estimationCreated,
+              'deleted' => $deleted,
+            ];
+          }
+
+          $uniqueEstimationHashes[] = $uniqueEstimationHash;
         }
       }
 
@@ -3967,7 +4009,7 @@ final class Api {
         }
       }
       else if ( mb_strlen( $orderStatus ) > 0 ) {
-        if ( !in_array( needle: $orderStatus, haystack: [ "pending", "approved", "rejected" ], strict: true ) ) {
+        if ( !in_array( needle: $orderStatus, haystack: [ "pending", "approved", "rejected", "canceled" ], strict: true ) ) {
           $this->printError( 403, 2013 );
         }
 
@@ -4217,6 +4259,8 @@ final class Api {
               'username' => $user['username'],
               'firstName' => $user['first_name'],
               'lastName' => $user['last_name'],
+              'email' => $user['email'],
+              'cellphone' => $user['cellphone'],
               'vehicleId' => $vehicle['vehicle_uuid'],
               'vehicleDetails' => $vehicleDetails,
               'vehicleRetailValue' => $vehicleRetailValue,
@@ -4245,6 +4289,8 @@ final class Api {
               'username' => $user['username'],
               'firstName' => $user['first_name'],
               'lastName' => $user['last_name'],
+              'email' => $user['email'],
+              'cellphone' => $user['cellphone'],
               'vehicleId' => $vehicle['vehicle_uuid'],
               'vehicleDetails' => $vehicleDetails,
               'vehicleRetailValue' => $vehicleRetailValue,
@@ -4467,9 +4513,26 @@ final class Api {
       else if ( $mode === 'update' ) {
         $ordersTableDataset = [];
 
-        if ( mb_strlen( $orderStatus ) > 0 && $myRole === 'admin' ) {
-          if ( !in_array( needle: $orderStatus, haystack: [ "pending", "approved", "rejected" ], strict: true ) ) {
+        if ( mb_strlen( $orderStatus ) > 0 ) {
+          if ( $myRole === 'admin' && !in_array( needle: $orderStatus, haystack: [ "pending", "approved", "rejected", "canceled" ], strict: true ) ) {
             $this->printError( 403, 2013 );
+          }
+          
+          if ( $myRole !== 'admin' && $orderStatus !== "canceled" ) {
+            $this->printError( 403, 2013 );
+          }
+
+          if ( $orderStatus === "canceled" ) {
+            $q7 = $this->app->db->query( "SELECT order_status FROM orders WHERE order_uuid = \"{$orderUuid}\"" );
+
+            if ( $q7->num_rows ) {
+              $currentOrderStatus = $q7->fetch_assoc()['order_status'];
+              $q7->free();
+
+              if ( $currentOrderStatus !== "pending" ) {
+                $this->printError( 403, 2013 );
+              }
+            }
           }
 
           $ordersTableDataset['order_status'] = $orderStatus;
@@ -4581,10 +4644,15 @@ final class Api {
         $vars['orderStatus'] = $orderStatus;
 
         $title = $this->getResourceByKey( 'orderStatusEmailTitle' );
-        $body = $this->getResourceByKey( 'orderStatusEmail' ) ;
+        $body = $this->getResourceByKey( 'orderStatusEmail' );
 
         foreach( $vars as $key => $value ) {
           $body = str_replace( "{{" . $key . "}}", $value, $body );
+        }
+
+        if ( $orderStatus === 'approved' ) {
+          $orderPolicy =  $this->getResourceByKey( 'orderPolicy' );
+          $body = $body . "<br><br>\n\n" . $orderPolicy;
         }
 
         $emailIsSent = $this->sendMail([

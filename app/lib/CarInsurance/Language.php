@@ -105,6 +105,7 @@ class Language {
             'api_code_2012' => "One of specified estimations is not found.",
             'api_code_2013' => "Invalid order status.",
             'api_code_2014' => "One of specified estimations already has been used for other order.",
+            'api_code_2015' => "You can canceling only pending orders.",
             'api_code_211' => "Assets are not found.",
             'api_code_2110' => "Specified account is not found.",
             'api_code_2111' => "An array of files has not been passed.",
